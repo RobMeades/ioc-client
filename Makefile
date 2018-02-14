@@ -36,7 +36,7 @@ error:
 	$(error Invalid configuration, please check your inputs)
 endif
 
-SOURCEFILES := audio.cpp ioc-client.cpp log/log.cpp timer/timer.cpp urtp/urtp.cpp
+SOURCEFILES := audio.cpp ioc-client.cpp log/log.cpp timer/timer.cpp urtp/urtp.cpp utils/utils.cpp
 EXTERNAL_LIBS := 
 EXTERNAL_LIBS_COPIED := $(foreach lib, $(EXTERNAL_LIBS),$(BINARYDIR)/$(notdir $(lib)))
 
@@ -191,5 +191,9 @@ $(BINARYDIR)/timer.o : timer/timer.cpp $(all_make_files) |$(BINARYDIR)
 
 
 $(BINARYDIR)/urtp.o : urtp/urtp.cpp $(all_make_files) |$(BINARYDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
+
+
+$(BINARYDIR)/utils.o : utils/utils.cpp $(all_make_files) |$(BINARYDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
 

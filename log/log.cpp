@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <utils.h>
 #include <log.h>
 
 /* ----------------------------------------------------------------
@@ -149,56 +150,6 @@ static FILE *newLogFile()
     }
 
     return pFile;
-}
-
-// Get the address portion of a URL, leaving off the port number etc.
-static void getAddressFromUrl(const char * pUrl, char * pAddressBuf, int lenBuf)
-{
-    const char * pPortPos;
-    int lenUrl;
-
-    if (lenBuf > 0) {
-        // Check for the presence of a port number
-        pPortPos = strchr(pUrl, ':');
-        if (pPortPos != NULL) {
-            // Length wanted is up to and including the ':'
-            // (which will be overwritten with the terminator)
-            if (lenBuf > pPortPos - pUrl + 1) {
-                lenBuf = pPortPos - pUrl + 1;
-            }
-        } else {
-            // No port number, take the whole thing
-            // including the terminator
-            lenUrl = strlen (pUrl);
-            if (lenBuf > lenUrl + 1) {
-                lenBuf = lenUrl + 1;
-            }
-        }
-        memcpy (pAddressBuf, pUrl, lenBuf);
-        *(pAddressBuf + lenBuf - 1) = 0;
-    }
-}
-
-// Get the port number from the end of a URL.
-static bool getPortFromUrl(const char * pUrl, int *pPort)
-{
-    bool success = false;
-    const char * pPortPos = strchr(pUrl, ':');
-
-    if (pPortPos != NULL) {
-        *pPort = atoi(pPortPos + 1);
-        success = true;
-    }
-
-    return success;
-}
-
-// Get the uSecond system time.
-static long long int getUSeconds(void)
-{
-    struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
-    return ((long long int) ts.tv_sec * 1000000000L + ts.tv_nsec) / 1000;
 }
 
 // Function to sit in a thread and upload log files.

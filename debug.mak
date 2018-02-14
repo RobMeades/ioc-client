@@ -13,7 +13,7 @@ OBJCOPY := objcopy
 
 #Additional flags
 PREPROCESSOR_MACROS := DEBUG=1 ENABLE_RAMLOG
-INCLUDE_DIRS := . log timer urtp
+INCLUDE_DIRS := . log timer urtp utils
 LIBRARY_DIRS := 
 LIBRARY_NAMES := pthread asound
 ADDITIONAL_LINKER_INPUTS := 

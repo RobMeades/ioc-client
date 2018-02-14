@@ -16,6 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <assert.h>
+#include <utils.h>
 #include <time.h>
 #include <urtp.h>
 
@@ -165,14 +166,6 @@ inline int Urtp::getMonoSample(const uint32_t *stereoSample)
 #endif
 
     return (int) retValue;
-}
-
-// Get the uSecond system time.
-static long long int getUSeconds(void)
-{
-    struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
-    return ((long long int) ts.tv_sec * 1000000000L + ts.tv_nsec) / 1000;
 }
 
 // Encode UNICAM_COMPRESSED_x_BIT.

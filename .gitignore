@@ -259,3 +259,9 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+/VisualGDBCache
+/debug.mak.old
+/Makefile.old
+/CodeDB
+/CodeDB
+/VisualGDBCache
