@@ -20,27 +20,18 @@
  * FUNCTION PROTOTYPES
  * -------------------------------------------------------------- */
 
-/** Initialise audio.
- *
- * @return  a pointer to the IocM2mAudio object.
- *          IMPORTANT: it is up to the caller to delete this
- *          object when done.
+/** Start audio streaming.
+ * @param pAlsaPcmDeviceName the name of the ALSA PCM device to stream
+ *                           from (must be 32 bits per channel, stereo,
+ *                           16 kHz sample rate).
+ * @param pAudioServerUrl    the URL of the server to stream at.
+ * @return                   true if succesful, else false.
  */
-bool initAudio();
+bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServerUrl);
 
-/** Shut down audio.
+/** Shut down audio streaming.
  */
-void deinitAudio();
-
-/** Determing if audio streaming is enabled.
- * @return true if audio streaming is enabled else false.
- */
-bool isAudioStreamingEnabled();
-
-/** Get the minimum number of URTP datagrams that are free.
- * @return the low water mark of free datagrams.
- */
-int getUrtpDatagramsFreeMin();
+void stopAudioStreaming();
 
 #endif // _AUDIO_
 

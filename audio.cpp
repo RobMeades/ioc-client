@@ -40,9 +40,6 @@
  * COMPILE-TIME MACROS
  * -------------------------------------------------------------- */
 
-// The name of the PCM device (the I2S microphone)
-#define AUDIO_PCM_DEVICE_NAME "mic_sv"
-
 // The maximum amount of time allowed to send a
 // datagram of audio over TCP.
 #define AUDIO_TCP_SEND_TIMEOUT_MS 1500
@@ -57,7 +54,6 @@
 
 // The default audio setup data.
 #define AUDIO_DEFAULT_FIXED_GAIN false
-#define AUDIO_DEFAULT_SERVER_URL "ciot.it-sgn.u-blox.com:5065"
 
 /* ----------------------------------------------------------------
  * CALLBACK FUNCTION PROTOTYPES
@@ -70,6 +66,12 @@ static void datagramOverflowStopCb(int numOverflows);
 /* ----------------------------------------------------------------
  * VARIABLES
  * -------------------------------------------------------------- */
+
+// The ALSA input device name.
+static const char *gpAlsaPcmDeviceName = NULL;
+
+// The Internet of Chuffs server URL.
+static const char *gpAudioServerUrl = NULL;
 
 // For monitoring progress.
 static size_t gSecondTicker;
@@ -92,7 +94,7 @@ static uint32_t gRawAudio[SAMPLES_PER_BLOCK * 2];
 static char gDatagramStorage[URTP_DATAGRAM_STORE_SIZE];
 
 // The address of the audio server.
-static struct sockaddr_in *gpAudioServerUrl = NULL;
+static struct sockaddr_in *gpAudioServerAddress = NULL;
 
 // Task to read and encode audio data.
 static std::thread *gpEncodeTask = NULL;
@@ -176,19 +178,19 @@ static bool startAudioStreamingConnection()
 
     LOG(EVENT_AUDIO_STREAMING_CONNECTION_START, 0);
     printf("Resolving IP address of the audio streaming server...\n");
-    if (gpAudioServerUrl == NULL) {
-        gpAudioServerUrl = new struct sockaddr_in;
-        getAddressFromUrl(AUDIO_DEFAULT_SERVER_URL, pBuf, AUDIO_MAX_LEN_SERVER_URL);
+    if (gpAudioServerAddress == NULL) {
+        gpAudioServerAddress = new struct sockaddr_in;
+        getAddressFromUrl(gpAudioServerUrl, pBuf, AUDIO_MAX_LEN_SERVER_URL);
         printf("[Looking for audio server URL \"%s\"...]\n", pBuf);
         LOG(EVENT_DNS_LOOKUP, 0);
-        if (inet_pton(AF_INET, pBuf, gpAudioServerUrl) > 0) {
-            printf("[Found it at IP address %s]\n", inet_ntoa(gpAudioServerUrl->sin_addr));
-            if (getPortFromUrl(AUDIO_DEFAULT_SERVER_URL, &port)) {
-                gpAudioServerUrl->sin_port = port;
-                printf("[Logging server port is %d]\n", gpAudioServerUrl->sin_port);
+        if (inet_pton(AF_INET, pBuf, gpAudioServerAddress) > 0) {
+            printf("[Found it at IP address %s]\n", inet_ntoa(gpAudioServerAddress->sin_addr));
+            if (getPortFromUrl(gpAudioServerUrl, &port)) {
+                gpAudioServerAddress->sin_port = port;
+                printf("[Logging server port is %d]\n", gpAudioServerAddress->sin_port);
             } else {
                 printf("[WARNING: no port number was specified in the audio server URL (\"%s\")]\n",
-                       AUDIO_DEFAULT_SERVER_URL);
+                       gpAudioServerUrl);
             }
         } else {
             LOG(EVENT_DNS_LOOKUP_FAILURE, h_errno);
@@ -227,7 +229,7 @@ static bool startAudioStreamingConnection()
     
     LOG(EVENT_TCP_CONNECTING, x);
     printf("Connecting TCP...\n");
-    x = connect(gSocket, (struct sockaddr *) gpAudioServerUrl, sizeof(struct sockaddr));
+    x = connect(gSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
     if (x < 0) {
         LOG(EVENT_TCP_CONNECT_FAILURE, errno);
         printf("Could not connect TCP socket (error %d).\n", errno);
@@ -393,7 +395,7 @@ static bool startPcm()
     LOG(EVENT_PCM_START, 0);
 
     // Open PCM device for recording (capture)
-    rc = snd_pcm_open(&gpPcmHandle, AUDIO_PCM_DEVICE_NAME, SND_PCM_STREAM_CAPTURE, 0);
+    rc = snd_pcm_open(&gpPcmHandle, gpAlsaPcmDeviceName, SND_PCM_STREAM_CAPTURE, 0);
     if (rc < 0) {
         LOG(EVENT_PCM_START_FAILURE, 1);
         printf("Unable to open pcm device: %s.\n", snd_strerror(rc));
@@ -442,44 +444,17 @@ static void stopPcm()
     snd_pcm_close(gpPcmHandle);
 }
 
-// Stop audio streaming.
-static void stopStreaming()
-{
-    LOG(EVENT_AUDIO_STREAMING_STOP, 0);
-    
-    if (gpEncodeTask != NULL) {
-        printf("Stopping audio encode task...\n");
-        gpEncodeTask->~thread();
-        gpEncodeTask->join();
-        delete gpEncodeTask;
-        gpEncodeTask = NULL;
-        printf("Audio encode task stopped.\n");
-    }
-    
-    if (gpSendTask != NULL) {
-        // Wait for any on-going transmissions to complete
-        sleep(2);
-
-        printf("Stopping audio send task...\n");
-        gpSendTask->~thread();
-        gpSendTask->join();
-        delete gpSendTask;
-        gpSendTask = NULL;
-        printf("Audio send task stopped.\n");
-    }
-    
-    sem_destroy(&gUrtpDatagramReady);
-    stopPcm();
-    stopAudioStreamingConnection();
-    stopTimer(gSecondTicker);
-
-    printf("Audio streaming stopped.\n");
-}
+/* ----------------------------------------------------------------
+ * PUBLIC FUNCTIONS
+ * -------------------------------------------------------------- */
 
 // Start audio streaming.
 // Note: here be multiple return statements.
-static bool startStreaming()
+bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServerUrl)
 {
+    gpAlsaPcmDeviceName = pAlsaPcmDeviceName;
+    gpAudioServerUrl = pAudioServerUrl;
+
     // Start the per-second monitor tick and reset the diagnostics
     LOG(EVENT_AUDIO_STREAMING_START, 0);
     gSecondTicker = startTimer(1000000L, TIMER_PERIODIC, audioMonitor, NULL);
@@ -532,6 +507,43 @@ static bool startStreaming()
     printf("Now streaming audio.\n");
 
     return true;
+}
+
+// Stop audio streaming.
+void stopAudioStreaming()
+{
+    LOG(EVENT_AUDIO_STREAMING_STOP, 0);
+    
+    gpAlsaPcmDeviceName = NULL;
+    gpAudioServerUrl = NULL;
+
+    if (gpEncodeTask != NULL) {
+        printf("Stopping audio encode task...\n");
+        gpEncodeTask->~thread();
+        gpEncodeTask->join();
+        delete gpEncodeTask;
+        gpEncodeTask = NULL;
+        printf("Audio encode task stopped.\n");
+    }
+    
+    if (gpSendTask != NULL) {
+        // Wait for any on-going transmissions to complete
+        sleep(2);
+
+        printf("Stopping audio send task...\n");
+        gpSendTask->~thread();
+        gpSendTask->join();
+        delete gpSendTask;
+        gpSendTask = NULL;
+        printf("Audio send task stopped.\n");
+    }
+    
+    sem_destroy(&gUrtpDatagramReady);
+    stopPcm();
+    stopAudioStreamingConnection();
+    stopTimer(gSecondTicker);
+
+    printf("Audio streaming stopped.\n");
 }
 
 // End of file

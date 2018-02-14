@@ -33,7 +33,7 @@
 /** The number of log entries (must be 1 or greater).
  */
 #ifndef MAX_NUM_LOG_ENTRIES
-# define MAX_NUM_LOG_ENTRIES 500
+# define MAX_NUM_LOG_ENTRIES 10000
 #endif
 
 // Increase this from 1 to skip flushing on file writes if the
@@ -81,7 +81,7 @@ void LOG(LogEvent event, int parameter);
  * @param pBuffer        must point to LOG_STORE_SIZE bytes of storage.
  * @param pUSecondTimeCb callback to obtain usecond time.
  */
-void initLog(void *pBuffer, long long int(*pUSecondTimeCb)(void));
+void initLog(void *pBuffer);
 
 /** Start logging to file.
  *
