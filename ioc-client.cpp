@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
@@ -33,7 +34,7 @@
 #define EXT_SEPARATOR "."
 
 // The default location for log files
-#define DEFAULT_LOG_FILE_PATH "~/logtmp"
+#define DEFAULT_LOG_FILE_PATH "./logtmp"
 
 /* ----------------------------------------------------------------
  * VARIABLES
@@ -49,7 +50,7 @@ static char gLogBuffer[LOG_STORE_SIZE];
 // Print the usage text
 static void printUsage(char * pExeName) {
     printf("\n%s: run the Internet of Chuffs client.  Usage:\n", pExeName);
-    printf("    %s audio_source server_url <-p local_port> <-l log_directory>\n\n", pExeName);
+    printf("    %s audio_source server_url <-p local_port> <-l log_directory>\n", pExeName);
     printf("where:\n");
     printf("    audio_source is the name of the ALSA PCM audio capture device (must be 32 bits per channel, stereo, 16 kHz sample rate),\n");
     printf("    server_url is the URL of the Internet of Chuffs server,\n");
@@ -75,13 +76,13 @@ static void exitHandler(int signal)
 int main(int argc, char *argv[])
 {
     int retValue = -1;
-    bool success = true;
+    bool success = false;
     int x = 0;
     char *pExeName = NULL;
     char *pPcmAudio = NULL;
     char *pUrl = NULL;
     int localPort = -1;
-    const char *pLogFilePath = NULL;
+    const char *pLogFilePath = DEFAULT_LOG_FILE_PATH;
     struct stat st = { 0 };
     char *pChar;
     struct sigaction sigIntHandler;
@@ -102,7 +103,7 @@ int main(int argc, char *argv[])
     x++;
 
     // Look for all the command line parameters
-    while (success && (x < argc)) {
+    while (x < argc) {
         // Test for PCM audio device
         if (x == 1) {
             pPcmAudio = argv[x];
@@ -120,59 +121,64 @@ int main(int argc, char *argv[])
             x++;
             if (x < argc) {
                 pLogFilePath = argv[x];
-                // Check if the directory exists
-                if (stat(pLogFilePath, &st) == -1) {
-                    // If it doesn't exist create it
-                    if (mkdir(pLogFilePath, 0700) != 0) {
-                        success = false;
-                        printf("Unable to create directory temporary log file directory %s.", pLogFilePath);
-                    }
-                }
             }
         }
         x++;
     }
     
-    // Must have no errors and the two mandatory command-line parameters
-    if (success && (pPcmAudio != NULL) && (pUrl != NULL)) {
-        if (pLogFilePath == NULL) {
-            pLogFilePath = DEFAULT_LOG_FILE_PATH;
-        } 
-        printf("Internet of Chuffs client starting. Audio PCM capture device is %s, server is %s", pPcmAudio, pUrl);
-        if (localPort >= 0) {
-            printf(", binding to local port %d", localPort);
+    // Must have the two mandatory command-line parameters
+    if ((pPcmAudio != NULL) && (pUrl != NULL)) {
+        // Check if the directory exists
+        if (stat(pLogFilePath, &st) == -1) {
+            // If it doesn't exist create it
+            if (mkdir(pLogFilePath, 0700) == 0) {
+                success = true;
+            } else {
+                printf("Unable to create directory temporary log file directory %s (%s).\n", pLogFilePath, strerror(errno));
+            }
+        } else {
+            success = true;
         }
-        if (pLogFilePath != NULL) {
-            printf(", temporarily storing log files in %s", pLogFilePath);
-        }
-        printf(".\n");
         
-        // Set up the CTRL-C handler
-        sigIntHandler.sa_handler = exitHandler;
-        sigemptyset(&sigIntHandler.sa_mask);
-        sigIntHandler.sa_flags = 0;
-        sigaction(SIGINT, &sigIntHandler, NULL);
+        if (success) {
+            printf("Internet of Chuffs client starting.\nAudio PCM capture device is \"%s\", server is \"%s\"", pPcmAudio, pUrl);
+            if (localPort >= 0) {
+                printf(", binding to local port %d", localPort);
+            }
+            if (pLogFilePath != NULL) {
+                printf(", temporarily storing log files in directory \"%s\"", pLogFilePath);
+            }
+            printf(".\n");
+        
+            // Set up the CTRL-C handler
+            sigIntHandler.sa_handler = exitHandler;
+            sigemptyset(&sigIntHandler.sa_mask);
+            sigIntHandler.sa_flags = 0;
+            sigaction(SIGINT, &sigIntHandler, NULL);
 
-        // Initialise logging
-        initLog(gLogBuffer);
-        initLogFile(pLogFilePath);
+            // Initialise logging
+            initLog(gLogBuffer);
+            initLogFile(pLogFilePath);
         
-        LOG(EVENT_SYSTEM_START, getUSeconds() / 1000000);
-        LOG(EVENT_BUILD_TIME_UNIX_FORMAT, __COMPILE_TIME_UNIX__);
+            LOG(EVENT_SYSTEM_START, getUSeconds() / 1000000);
+            LOG(EVENT_BUILD_TIME_UNIX_FORMAT, __COMPILE_TIME_UNIX__);
         
-        // Start
-        if (startAudioStreaming(pPcmAudio, pUrl)) {
-            printf("Audio streaming is running, press CTRL-C to stop.\n");
+            // Start
+            success = startAudioStreaming(pPcmAudio, pUrl);
+            if (success) {
+                printf("Audio streaming is running, press CTRL-C to stop.\n");
+            }
+        } else {
+            printUsage(pExeName);
         }
     } else {
         printUsage(pExeName);
-        success = false;
     }
 
     if (success) {
         retValue = 0;
     }
-    
+
     return retValue;
 }
 

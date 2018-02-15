@@ -169,9 +169,10 @@ static void audioMonitor(size_t timerId, void *pUserData)
 static bool startAudioStreamingConnection()
 {
     char *pBuf = new char[AUDIO_MAX_LEN_SERVER_URL];
+    struct hostent *pHostEntries = NULL;
     int port;
     const int setOption = 1;
-    struct timeval tv;
+    struct timeval tv = {0};
     int x;
     
     tv.tv_sec = 1; /* 1 second timeout */
@@ -180,14 +181,19 @@ static bool startAudioStreamingConnection()
     printf("Resolving IP address of the audio streaming server...\n");
     if (gpAudioServerAddress == NULL) {
         gpAudioServerAddress = new struct sockaddr_in;
+        memset(gpAudioServerAddress, 0, sizeof(*gpAudioServerAddress));
         getAddressFromUrl(gpAudioServerUrl, pBuf, AUDIO_MAX_LEN_SERVER_URL);
         printf("[Looking for audio server URL \"%s\"...]\n", pBuf);
         LOG(EVENT_DNS_LOOKUP, 0);
-        if (inet_pton(AF_INET, pBuf, gpAudioServerAddress) > 0) {
+        pHostEntries = gethostbyname(pBuf);
+        if (pHostEntries != NULL) {
+            // Copy the network address to sockaddr_in structure
+            memcpy(&(gpAudioServerAddress->sin_addr), pHostEntries->h_addr_list[0], pHostEntries->h_length) ;
+            gpAudioServerAddress->sin_family = AF_INET;
             printf("[Found it at IP address %s]\n", inet_ntoa(gpAudioServerAddress->sin_addr));
             if (getPortFromUrl(gpAudioServerUrl, &port)) {
                 gpAudioServerAddress->sin_port = port;
-                printf("[Logging server port is %d]\n", gpAudioServerAddress->sin_port);
+                printf("[Audio server port is %d]\n", gpAudioServerAddress->sin_port);
             } else {
                 printf("[WARNING: no port number was specified in the audio server URL (\"%s\")]\n",
                        gpAudioServerUrl);
@@ -205,7 +211,7 @@ static bool startAudioStreamingConnection()
     gSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (gSocket < 0) {
         LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
-        printf("Could not open TCP socket to audio streaming server (error %d).\n", errno);
+        printf("Could not open TCP socket to audio streaming server (%s).\n", strerror(errno));
         return false;
     }
     LOG(EVENT_SOCKET_OPENED, gSocket);
@@ -214,7 +220,7 @@ static bool startAudioStreamingConnection()
     x = setsockopt(gSocket, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv, sizeof(tv));
     if (x < 0) {
         LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
-        printf("Could not set timeout in TCP socket options (error %d).\n", errno);
+        printf("Could not set timeout in TCP socket options (%s).\n", strerror(errno));
         return false;
     }
     printf("Setting TCP_NODELAY in TCP socket options...\n");
@@ -222,7 +228,7 @@ static bool startAudioStreamingConnection()
     x = setsockopt(gSocket, IPPROTO_TCP, TCP_NODELAY, (void *) &setOption, sizeof(setOption));
     if (x < 0) {
         LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
-        printf("Could not set TCP_NODELAY in socket options (error %d).\n", errno);
+        printf("Could not set TCP_NODELAY in socket options (%s).\n", strerror(errno));
         return false;
     }
     LOG(EVENT_TCP_CONFIGURED, 0);
@@ -232,7 +238,7 @@ static bool startAudioStreamingConnection()
     x = connect(gSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
     if (x < 0) {
         LOG(EVENT_TCP_CONNECT_FAILURE, errno);
-        printf("Could not connect TCP socket (error %d).\n", errno);
+        printf("Could not connect TCP socket (%s).\n", strerror(errno));
         return false;
     }
     
@@ -480,7 +486,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServe
     printf("Initialising sempahore...\n");
     if (sem_init(&gUrtpDatagramReady, false, 0) != 0) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
-        printf("Error initialising semaphore (%d).\n", errno);
+        printf("Error initialising semaphore (%s).\n", strerror(errno));
         return false;
     }
 
@@ -489,7 +495,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServe
         gpSendTask = new std::thread(sendAudioData);
         if (gpSendTask == NULL) {
             LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
-            printf("Error starting task (%d).\n", errno);
+            printf("Error starting task (%s).\n", strerror(errno));
             return false;
         }
     }
@@ -499,7 +505,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServe
         gpEncodeTask = new std::thread(encodeAudioData);
         if (gpEncodeTask == NULL) {
             LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
-            printf("Error starting task (%d).\n", errno);
+            printf("Error starting task (%s).\n", strerror(errno));
             return false;
         }
     }

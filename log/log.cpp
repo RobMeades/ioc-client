@@ -62,9 +62,6 @@ typedef struct {
  * VARIABLES
  * -------------------------------------------------------------- */
 
-// To obtain file system errors.
-extern int errno;
-
 // The strings associated with the enum values.
 extern const char *gLogStrings[];
 extern const int gNumLogStrings;
@@ -141,7 +138,7 @@ static FILE *newLogFile()
                 LOG(EVENT_LOG_FILE_OPEN, 0);
             } else {
                 LOG(EVENT_LOG_FILE_OPEN_FAILURE, errno);
-                perror ("Error initialising log file");
+                printf("Error initialising log file (%s).\n", strerror(errno));
             }
         } else {
             fclose(pFile);
@@ -542,7 +539,7 @@ void printLog()
             LOG(EVENT_LOG_FILE_OPEN, 0);
         } else {
             LOG(EVENT_LOG_FILE_OPEN_FAILURE, errno);
-            perror ("Error initialising log file");
+            printf("Error initialising log file (%s).\n", strerror(errno));
         }
     }
 
