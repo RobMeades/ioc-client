@@ -233,7 +233,7 @@ static bool startAudioStreamingConnection()
     }
     LOG(EVENT_TCP_CONFIGURED, 0);
     
-    LOG(EVENT_TCP_CONNECTING, x);
+    LOG(EVENT_TCP_CONNECTING, 0);
     printf("Connecting TCP...\n");
     x = connect(gSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
     if (x < 0) {
@@ -241,6 +241,7 @@ static bool startAudioStreamingConnection()
         printf("Could not connect TCP socket (%s).\n", strerror(errno));
         return false;
     }
+    LOG(EVENT_TCP_CONNECTED, 0);
     
     gAudioCommsConnected = true;
 
@@ -456,7 +457,8 @@ static void stopPcm()
 
 // Start audio streaming.
 // Note: here be multiple return statements.
-bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServerUrl)
+bool startAudioStreaming(const char *pAlsaPcmDeviceName,
+                         const char *pAudioServerUrl)
 {
     gpAlsaPcmDeviceName = pAlsaPcmDeviceName;
     gpAudioServerUrl = pAudioServerUrl;

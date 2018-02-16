@@ -27,7 +27,8 @@
  * @param pAudioServerUrl    the URL of the server to stream at.
  * @return                   true if succesful, else false.
  */
-bool startAudioStreaming(const char *pAlsaPcmDeviceName, const char *pAudioServerUrl);
+bool startAudioStreaming(const char *pAlsaPcmDeviceName,
+                         const char *pAudioServerUrl);
 
 /** Shut down audio streaming.
  */

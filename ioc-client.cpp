@@ -50,14 +50,13 @@ static char gLogBuffer[LOG_STORE_SIZE];
 // Print the usage text
 static void printUsage(char * pExeName) {
     printf("\n%s: run the Internet of Chuffs client.  Usage:\n", pExeName);
-    printf("    %s audio_source server_url <-p local_port> <-l log_directory>\n", pExeName);
+    printf("    %s audio_source server_url <-l log_directory>\n", pExeName);
     printf("where:\n");
     printf("    audio_source is the name of the ALSA PCM audio capture device (must be 32 bits per channel, stereo, 16 kHz sample rate),\n");
     printf("    server_url is the URL of the Internet of Chuffs server,\n");
-    printf("    -p optionally specifies the local port to bind to,\n");
     printf("    -l optionally specifies the temporary directory to use for log files (default %s); the directory will be created if it does not exist,\n", DEFAULT_LOG_FILE_PATH);
     printf("For example:\n");
-    printf("    %s mic io-server.co.uk:1297 -p 5065 -l /var/log\n\n", pExeName);
+    printf("    %s mic io-server.co.uk:1297 -l /var/log\n\n", pExeName);
 }
 
 // Signal handler for CTRL-C
@@ -81,7 +80,6 @@ int main(int argc, char *argv[])
     char *pExeName = NULL;
     char *pPcmAudio = NULL;
     char *pUrl = NULL;
-    int localPort = -1;
     const char *pLogFilePath = DEFAULT_LOG_FILE_PATH;
     struct stat st = { 0 };
     char *pChar;
@@ -110,12 +108,6 @@ int main(int argc, char *argv[])
         // Test for server URL
         } else if (x == 2) {
             pUrl = argv[x];
-        // Test for port option
-        } else if (strcmp(argv[x], "-p") == 0) {
-            x++;
-            if (x < argc) {
-                localPort = atoi(argv[x]);
-            }
         // Test for log directory option
         } else if (strcmp(argv[x], "-l") == 0) {
             x++;
@@ -142,9 +134,6 @@ int main(int argc, char *argv[])
         
         if (success) {
             printf("Internet of Chuffs client starting.\nAudio PCM capture device is \"%s\", server is \"%s\"", pPcmAudio, pUrl);
-            if (localPort >= 0) {
-                printf(", binding to local port %d", localPort);
-            }
             if (pLogFilePath != NULL) {
                 printf(", temporarily storing log files in directory \"%s\"", pLogFilePath);
             }

@@ -456,7 +456,7 @@ Enter the local IP address of your Raspberry Pi into a browser and you should se
 
 Connecting To A Server
 ======================
-Before completing this section you will need to set up the server-side of the IOC, for which see <insert link here>.
+Before completing this section you will need to set up the server-side of the IOC, for which see https://github.com/RobMeades/ioc-server.
 
 Generate a key pair:
 
@@ -552,23 +552,9 @@ FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo syst
 
 ...and of course run `sudo systemctl stop cellular` to stop the current instance.
 
-SERVER SIDE
+Server Side
 ===========
-Install `golang` with:
-
-`sudo apt-get install golang-go`
-
-Edit `/etc/profile` and add to it the following line:
-
-`export PATH=$PATH:/usr/local/go/bin`
-
-Install SSH with:
-
-`sudo-apt-get install openssh-server`
-
-...and make sure that you can log in using SSH from another machine with your username/password.
-
-To protect the server from unauthorised users, make sure you have generated and installed key pairs according to the instructions for the ioc-client <insert link here>, then edit the file `/etc/ssh/sshd_config` and set `PasswordAuthentication` to `no`, then restart the `ssd` daemon with `sudo systemctl restart sshd`.
+Follow the instructions at https://github.com/RobMeades/ioc-server.
 
 Debugging End To End Connectivity
 ==================================
