@@ -1,3 +1,7 @@
+Introduction
+============
+This Internet of Chuffs client is designed to stream audio from an I2S microphone (e.g. the ICS43432 MEMS microphone) connected to a Raspberry Pi over a cellular interface to an [ioc-server](https://github.com/RobMeades/ioc-server).  The instructions below cover the entire installation of the Raspberry Pi side of the system, including testing that the whole system works.
+
 Load Raspbian
 =============
 First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default username `pi` and default password `raspberry`).
@@ -111,7 +115,6 @@ ip_tables              13161  0
 x_tables               20578  1 ip_tables
 ipv6                  408900  24
 ```
-
 If `snd_soc_ics43432` does not appear in the list, check what went wrong during boot using `journalctl -b` and/or `dmesg`.
 
 Now we need to create a device tree entry to make use of this driver.  Create a file `i2s-soundcard-overlay.dts` with this content:
@@ -257,7 +260,7 @@ Connect up your ICS43432 MEMS microphone, with the LR select pin grounded, and y
 
 If you touch the microphone while the recording is running you should see the VU meter displayed in the SSH window change.
 
-To make a proper capture you will need to configure for a mono microphone and a sensible recording level.  In your home directory, create a file called `.asoundrc` with the following contents:
+To make a proper capture you will need to configure for a mono microphone and a sensible recording level.  In your home directory, create a file called `/etc/asound.conf` with the following contents:
 
 ```
 pcm.mic_hw {
@@ -292,56 +295,7 @@ Now run `alsamixer`, call up the sound card menu by pressing `F6`, select `mems-
 
 Now run another recording and, hopefully, you will get a better sound level in your `test.wav` file.  Finally, to get a mono recording, use:
 
-`arecord -Dmic_mono -r16000 -fS32_LE -twav -d10 -Vmono test.wav`
-
-Remote Access
-=============
-I set up the Raspberry Pi to use a DDSN account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
-
-```
-wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
-tar xzf noip-duc-linux.tar.gz
-cd noip-2.1.9-1/
-make
-sudo make install
-```
-You will need to supply your www.noip.com account details and chose the correct DDNS entry to link to the Raspberry Pi.
-
-Set permissions correctly with:
-
-```
-sudo chmod 700 /usr/local/bin/noip2
-sudo chown root:root /usr/local/bin/noip2
-sudo chmod 600 /usr/local/etc/no-ip2.conf
-sudo chown root:root /usr/local/etc/no-ip2.conf
-```
-Create a file named `noip.service` in the `/etc/systemd/system/` directory with the following contents:
-
-```
-[Unit]
-Description=No-ip.com dynamic IP address updater
-After=network-online.target
-After=syslog.target
-
-[Install]
-WantedBy=multi-user.target
-Alias=noip.service
-
-[Service]
-# Start main service
-ExecStart=/usr/local/bin/noip2
-Restart=always
-Type=forking
-```
-Check that the `noip` daemon starts correctly with:
-
-`sudo systemctl start noip`
-
-Your www.noip.com account should show that the update client has been in contact.  Reboot and check that the service has been started automatically with:
-
-`sudo systemctl status noip`
-
-...and by checking once more that your www.noip.com account shows that the update client has been in contact.
+For the sections that follow, the device you want to stream audio from is `mic_hw`; the others are there simply to allow verification of correct configuration with `arecord`.
 
 Developing With ALSA
 ====================
@@ -446,14 +400,6 @@ Find the task number against the line `sudo wvdial` and kill that task; in my ca
 
 You now have proven cellular connectivity.
 
-Web Server Setup
-================
-Install `nginx` with:
-
-`sudo apt-get install nginx`
-
-Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with `Welcome to nginx!` on the top in large friendly letters.
-
 Connecting To A Server
 ======================
 Before completing this section you will need to set up the server-side of the IOC, for which see https://github.com/RobMeades/ioc-server.
@@ -480,7 +426,7 @@ To start up the cellular connection and open an SSH tunnel to the server at boot
 
 ```
 [Unit]
-Description=Cellular Connection
+Description=Cellular connection
 BindsTo=dev-modem.device
 After=dev-modem.device
      
@@ -522,6 +468,8 @@ After=network-online.target
 
 [Service]
 ExecStart=/usr/bin/ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L xxxx:localhost:yyyy -i /home/pi/ioc -p zzzz user@host
+Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
@@ -550,9 +498,37 @@ FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo syst
 
 `sudo systemctl disable cellular`
 
-...and of course run `sudo systemctl stop cellular` to stop the current instance.
+...and of course run `sudo systemctl stop cellular` to stop the current instance.  Or just leave the cellular modem disconnected from the Raspberry Pi, to be quite sure.
 
-If you need to open other tunnelling ports (e.g. to upload log files from the ioc-client) then repeat the process of creating a systemctl unit file for the additional ports also.
+If you need to open other tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemctl unit file for the additional tunnels.
+
+Once you have everything running sweetly, create another `systemctl` unit file that starts the `ioc-cient` at boot by creating a file called something like `/lib/systemd/system/ioc-client.service` with contents something like:
+
+```
+[Unit]
+Description=IoC client
+
+[Service]
+ExecStart=/home/pi/ioc-client mic ioc_server.com:port -ls log_server:port
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+...where `/home/pi/` is the path to the location of the `ioc-client` executable, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the IoC server application is running and `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running.
+
+Test that it works with:
+
+`sudo systemctl start ioc-client`
+
+...and then check its status with:
+
+`sudo systemctl status ioc-client`
+
+Finally, enable it to start at boot with:
+
+`sudo systemctl enable ioc-client`
 
 Server Side
 ===========
@@ -571,3 +547,61 @@ If you find that the SSH tunnel won't connect or there are other end-to-end conn
 ...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side netcat line on another Linux server on the internet, just to be sure that the server is visible.
 
 If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
+
+Remote Access
+=============
+I set up the Raspberry Pi to use a DDSN account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
+
+```
+wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
+tar xzf noip-duc-linux.tar.gz
+cd noip-2.1.9-1/
+make
+sudo make install
+```
+You will need to supply your www.noip.com account details and chose the correct DDNS entry to link to the Raspberry Pi.
+
+Set permissions correctly with:
+
+```
+sudo chmod 700 /usr/local/bin/noip2
+sudo chown root:root /usr/local/bin/noip2
+sudo chmod 600 /usr/local/etc/no-ip2.conf
+sudo chown root:root /usr/local/etc/no-ip2.conf
+```
+Create a file named `noip.service` in the `/etc/systemd/system/` directory with the following contents:
+
+```
+[Unit]
+Description=No-ip.com dynamic IP address updater
+After=network-online.target
+After=syslog.target
+
+[Install]
+WantedBy=multi-user.target
+Alias=noip.service
+
+[Service]
+# Start main service
+ExecStart=/usr/local/bin/noip2
+Restart=always
+Type=forking
+```
+Check that the `noip` daemon starts correctly with:
+
+`sudo systemctl start noip`
+
+Your www.noip.com account should show that the update client has been in contact.  Reboot and check that the service has been started automatically with:
+
+`sudo systemctl status noip`
+
+...and by checking once more that your www.noip.com account shows that the update client has been in contact.
+
+Web Server Setup
+================
+Install `nginx` with:
+
+`sudo apt-get install nginx`
+
+Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with `Welcome to nginx!` on the top in large friendly letters.
+
