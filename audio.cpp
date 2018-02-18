@@ -527,7 +527,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
         return false;
     }
 
-    printf("Initialising sempahores...\n");
+    printf("Initialising semaphores...\n");
     if (sem_init(&gUrtpDatagramReady, false, 0) != 0) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
         printf("Error initialising gUrtpDatagramReady semaphore (%s).\n", strerror(errno));

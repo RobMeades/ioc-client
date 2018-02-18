@@ -179,7 +179,11 @@ int main(int argc, char *argv[])
             if (success) {
                 printf("Audio streaming is running, press CTRL-C to stop.\n");
                 pause();
+            } else {
+                printf("Could not start audio streaming, ending.\n");
             }
+            // Call the exit handler directly if we get here
+            exitHandler(0);
         } else {
             printUsage(pExeName);
         }

@@ -182,7 +182,7 @@ static void logFileUploadTask()
         // stores them in separate files
         while (((pDirEnt = readdir(pDir)) != NULL) && (sem_trywait(&gStopLogUploadTask) != 0)) {
             // Open the file, provided it's not the one we're currently logging to
-            if ((!strcmp(pDirEnt->d_name, ".") && !strcmp(pDirEnt->d_name, "..")) &&
+            if (((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)) &&
                 (pDirEnt->d_type == DT_REG) &&
                 ((gpLogFileUploadData->pCurrentLogFile == NULL) ||
                  (strcmp(pDirEnt->d_name, gpLogFileUploadData->pCurrentLogFile) != 0))) {
@@ -234,7 +234,7 @@ static void logFileUploadTask()
                             LOG(EVENT_LOG_FILE_OPEN_FAILURE, errno);
                         }
                     } else {
-                        LOG(EVENT_TCP_CONNECT_FAILURE, y);
+                        LOG(EVENT_TCP_CONNECT_FAILURE, errno);
                     }
                 } else {
                     LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
@@ -328,7 +328,7 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
             }
             while ((pDirEnt = readdir(pDir)) != NULL) {
                 // Open the file, provided it's not the one we're currently logging to
-                if((!strcmp(pDirEnt->d_name, ".") && !strcmp(pDirEnt->d_name, "..")) &&
+                if(((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)) &&
                     (pDirEnt->d_type == DT_REG) &&
                     ((pCurrentLogFile == NULL) || (strcmp(pDirEnt->d_name, pCurrentLogFile) != 0))) {
                     z++;
@@ -347,7 +347,8 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
                 if (pHostEntries != NULL) {
                     // Copy the network address to sockaddr_in structure
                     memcpy(&(gpLoggingServer->sin_addr), pHostEntries->h_addr_list[0], pHostEntries->h_length);
-                    printf("[Found it at IP address %s]\n", inet_ntoa(gpLoggingServer->sin_addr));
+                    gpLoggingServer->sin_family = AF_INET;
+                            printf("[Found it at IP address %s]\n", inet_ntoa(gpLoggingServer->sin_addr));
                     if (getPortFromUrl(pLoggingServerUrl, &port)) {
                         gpLoggingServer->sin_port = htons(port);
                         printf("[Logging server port is %d]\n", port);
@@ -362,15 +363,16 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
 
                 gpLogFileUploadData = new LogFileUploadData();
                 gpLogFileUploadData->pCurrentLogFile = pCurrentLogFile;
-                // Note: this will be destroyed by the log file upload thread when it finishes
+                // Note: gpLogFileUploadData will be destroyed by the log file upload thread when it finishes
+                sem_init(&gStopLogUploadTask, false, 0);
                 gpLogUploadThread = new std::thread(logFileUploadTask);
                 if (gpLogUploadThread != NULL) {
-                    sem_init(&gStopLogUploadTask, false, 0);
                     printf("[Log file upload background task is now running]\n");
                     success = true;
                 } else {
                     delete gpLogFileUploadData;
                     gpLogFileUploadData = NULL;
+                    sem_destroy(&gStopLogUploadTask);
                     printf("[Unable to instantiate thread to upload files to logging server]\n");
                 }
             } else {

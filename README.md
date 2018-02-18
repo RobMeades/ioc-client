@@ -512,11 +512,11 @@ Your modem should connect to the cellular network and, if you run `ifconfig`, yo
 
 `sudo systemctl stop cellular`
 
-Create the file `/lib/systemd/system/ssh-tunnel.service` with contents as follows:
+Create the file `/lib/systemd/system/urtp-tunnel.service` with contents as follows:
 
 ```
 [Unit]
-Description=SSH tunnel to server
+Description=SSH tunnel to server for URTP traffic
 Wants=network-online.target
 After=network-online.target
 
@@ -532,13 +532,13 @@ Before you start the service, cut and paste your finalised `ExecStart` line and 
 
 Now test that the tunnel comes up correctly with:
 
-`sudo systemctl start ssh-tunnel`
+`sudo systemctl start urtp-tunnel`
 
 Check on the server end (e.g. by running `journalctl -f`) that the connection is successful.  If you have trouble, add the `-vvv` switch to the `ssh` command line above, do a `sudo systemctl daemon-reload`, start the service again and look at the output on the Raspberry Pi with `journalctl -b`.
 
 Enable the tunnel to start at boot with:
 
-`sudo systemctl enable ssh-tunnel`
+`sudo systemctl enable urtp-tunnel`
 
 Reboot and check that the tunnel is open (this will be over Ethernet).  If that is successful, enable the cellular service to start at boot:
 
@@ -551,6 +551,8 @@ FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo syst
 `sudo systemctl disable cellular`
 
 ...and of course run `sudo systemctl stop cellular` to stop the current instance.
+
+If you need to open other tunnelling ports (e.g. to upload log files from the ioc-client) then repeat the process of creating a systemctl unit file for the additional ports also.
 
 Server Side
 ===========
