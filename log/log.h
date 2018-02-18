@@ -21,6 +21,7 @@
  */
 
 #include "stdbool.h"
+#include "stdint.h"
 #include "log_enum.h"
 
 #ifndef _LOG_
@@ -49,11 +50,11 @@
 /** An entry in the log.
  */
 typedef struct {
-    long long int timestamp;
-    int event; // This will be LogEvent but it is stored as an int
-               // so that we are guaranteed to get a 32-bit value,
-               // making it easier to decode logs on another platform
-    int parameter;
+    uint64_t timestamp;
+    uint32_t event;  // This will be LogEvent but it is stored as an int
+                     // so that we are guaranteed to get a 32-bit value,
+                     // making it easier to decode logs on another platform
+    uint32_t parameter;
 } LogEntry;
 
 
