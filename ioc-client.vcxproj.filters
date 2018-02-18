@@ -51,6 +51,9 @@
     <ClCompile Include="utils\utils.cpp">
       <Filter>Source files</Filter>
     </ClCompile>
+    <ClCompile Include="log\log_strings.c">
+      <Filter>Source files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Makefile" />

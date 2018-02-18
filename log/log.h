@@ -108,8 +108,10 @@ void stopLogFileUpload();
 void deinitLog();
 
 /** Write the logging buffer to the log file.
+ * @param the ID of the timer calling this callback.
+ * @param the user data pointer (passed in by timer, not actually used).
  */
-void writeLog();
+void writeLogCallback(size_t timerId, void *pUserData);
 
 /** Print out the logged items.
  */

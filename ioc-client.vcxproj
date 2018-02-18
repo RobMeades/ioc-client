@@ -78,6 +78,7 @@
     <ClCompile Include="audio.cpp" />
     <ClCompile Include="ioc-client.cpp" />
     <ClCompile Include="log\log.cpp" />
+    <ClCompile Include="log\log_strings.c" />
     <ClCompile Include="timer\timer.cpp" />
     <ClCompile Include="urtp\urtp.cpp" />
     <ClCompile Include="utils\utils.cpp" />

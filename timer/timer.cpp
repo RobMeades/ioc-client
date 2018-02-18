@@ -257,12 +257,11 @@ unsigned long stopTimer(size_t timerId)
 
         if (pNode) {
             if (pNode->hasExpired) {
-                durationMicroseconds = (unsigned long) timeDifference(&(pTmp->startTime), &(pTmp->expiryTime));
-            }
-            else {
+                durationMicroseconds = (unsigned long) timeDifference(&(pNode->startTime), &(pNode->expiryTime));
+            } else {
                 struct timeval timeNow;
                 gettimeofday(&(timeNow), NULL);
-                durationMicroseconds = (unsigned long) timeDifference(&(pTmp->startTime), &(timeNow));
+                durationMicroseconds = (unsigned long) timeDifference(&(pNode->startTime), &(timeNow));
             }
             delete pNode;
         }

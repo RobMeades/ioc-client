@@ -40,6 +40,10 @@
  * COMPILE-TIME MACROS
  * -------------------------------------------------------------- */
 
+// For testing only: define this to also write incoming audio PCM
+// stream to file.
+//#define AUDIO_TEST_OUTPUT_FILENAME "/home/pi/audio.pcm"
+
 // The maximum amount of time allowed to send a
 // datagram of audio over TCP.
 #define AUDIO_TCP_SEND_TIMEOUT_MS 1500
@@ -48,12 +52,16 @@
 // audio streaming socket for this long, it's gone bad.
 #define AUDIO_MAX_DURATION_SOCKET_ERRORS_MS 1000
 
+// The audio send data task will run anyway this interval,
+// necessary in order to terminate it in an orderly fashion.
+#define AUDIO_SEND_DATA_RUN_ANYWAY_TIME_S 2
+
 // The maximum length of an audio server URL (including
 // terminator).
 #define AUDIO_MAX_LEN_SERVER_URL 128
 
 // The default audio setup data.
-#define AUDIO_DEFAULT_FIXED_GAIN false
+#define AUDIO_DEFAULT_FIXED_GAIN -1
 
 /* ----------------------------------------------------------------
  * CALLBACK FUNCTION PROTOTYPES
@@ -102,8 +110,14 @@ static std::thread *gpEncodeTask = NULL;
 // Task to send data off to the audio streaming server.
 static std::thread *gpSendTask = NULL;
 
-// Semaphore to communicate between tasks.
+// Semaphore to communicate data transfer between tasks.
 static sem_t gUrtpDatagramReady;
+
+// Semaphore to stop the encode task.
+static sem_t gStopEncodeTask;
+
+// Semaphore to stop the send task.
+static sem_t gStopSendTask;
 
 // The URTP codec.
 static Urtp gUrtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
@@ -121,6 +135,11 @@ static unsigned long gAverageAudioDatagramSendDuration = 0;
 static unsigned long gNumAudioDatagrams = 0;
 static unsigned long gNumAudioDatagramsSendTookTooLong = 0;
 static unsigned long gWorstCaseAudioDatagramSendDuration = 0;
+
+// For testing.
+#ifdef AUDIO_TEST_OUTPUT_FILENAME
+static FILE *gpAudioOutputFile = NULL;
+#endif
 
 /* ----------------------------------------------------------------
  * STATIC FUNCTIONS: URTP CODEC AND ITS CALLBACK FUNCTIONS
@@ -192,8 +211,8 @@ static bool startAudioStreamingConnection()
             gpAudioServerAddress->sin_family = AF_INET;
             printf("[Found it at IP address %s]\n", inet_ntoa(gpAudioServerAddress->sin_addr));
             if (getPortFromUrl(gpAudioServerUrl, &port)) {
-                gpAudioServerAddress->sin_port = port;
-                printf("[Audio server port is %d]\n", gpAudioServerAddress->sin_port);
+                gpAudioServerAddress->sin_port = htons(port);
+                printf("[Audio server port is %d]\n", port);
             } else {
                 printf("[WARNING: no port number was specified in the audio server URL (\"%s\")]\n",
                        gpAudioServerUrl);
@@ -263,7 +282,7 @@ static void encodeAudioData()
 {
     int retValue;
 
-    while (1) {
+    while (sem_trywait(&gStopEncodeTask) != 0) {
         // Get a buffer full of audio data
         retValue = snd_pcm_readi(gpPcmHandle, gRawAudio, gPcmFrames);
         if (retValue == -EPIPE) {
@@ -278,6 +297,11 @@ static void encodeAudioData()
         } else {
             // Encode the data
             gUrtp.codeAudioBlock(gRawAudio);
+#ifdef AUDIO_TEST_OUTPUT_FILENAME
+            if (gpAudioOutputFile != NULL) {
+                fwrite(gRawAudio, sizeof(gRawAudio), 1, gpAudioOutputFile);
+            }
+#endif
         }
     }
 }
@@ -319,14 +343,18 @@ static void sendAudioData()
     struct timeval start;
     struct timeval end;
     struct timeval badStart;
+    struct timespec runAnywayTime;
     unsigned long durationMs;
     int retValue;
     bool okToDelete = false;
 
-    while (gAudioCommsConnected) {
-        // Wait for at least one datagram to be ready to send
-        sem_wait(&gUrtpDatagramReady);
+    runAnywayTime.tv_sec = AUDIO_SEND_DATA_RUN_ANYWAY_TIME_S;
+    runAnywayTime.tv_nsec = 0;
+    while (gAudioCommsConnected && (sem_trywait(&gStopSendTask) != 0)) {
         
+        // Wait for at least one datagram to be ready to send
+        sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
+
         while ((pUrtpDatagram = gUrtp.getUrtpDatagram()) != NULL) {
             okToDelete = false;
             gettimeofday(&start, NULL);
@@ -440,6 +468,13 @@ static bool startPcm()
     snd_pcm_hw_params_get_period_size(gpPcmHwParams, &pcmFrames, &dir);
     assert(pcmFrames == gPcmFrames);
     
+#ifdef AUDIO_TEST_OUTPUT_FILENAME
+    gpAudioOutputFile = fopen(AUDIO_TEST_OUTPUT_FILENAME, "wb+");
+    if (gpAudioOutputFile == NULL) {
+        printf("Cannot open audio test output file %s (%s).\n", AUDIO_TEST_OUTPUT_FILENAME, strerror(errno));
+    }
+#endif
+    
     return true;
 }
 
@@ -449,6 +484,13 @@ static void stopPcm()
     LOG(EVENT_PCM_STOP, 0);
     snd_pcm_drain(gpPcmHandle);
     snd_pcm_close(gpPcmHandle);
+
+#ifdef AUDIO_TEST_OUTPUT_FILENAME
+    if (gpAudioOutputFile != NULL) {
+        fclose(gpAudioOutputFile);
+        gpAudioOutputFile = NULL;
+    }
+#endif
 }
 
 /* ----------------------------------------------------------------
@@ -485,10 +527,20 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
         return false;
     }
 
-    printf("Initialising sempahore...\n");
+    printf("Initialising sempahores...\n");
     if (sem_init(&gUrtpDatagramReady, false, 0) != 0) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
-        printf("Error initialising semaphore (%s).\n", strerror(errno));
+        printf("Error initialising gUrtpDatagramReady semaphore (%s).\n", strerror(errno));
+        return false;
+    }
+    if (sem_init(&gStopEncodeTask, false, 0) != 0) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
+        printf("Error initialising gStopEncodeTask semaphore (%s).\n", strerror(errno));
+        return false;
+    }
+    if (sem_init(&gStopSendTask, false, 0) != 0) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
+        printf("Error initialising gStopSendTask semaphore (%s).\n", strerror(errno));
         return false;
     }
 
@@ -496,7 +548,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     if (gpSendTask == NULL) {
         gpSendTask = new std::thread(sendAudioData);
         if (gpSendTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
         }
@@ -506,7 +558,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     if (gpEncodeTask == NULL) {
         gpEncodeTask = new std::thread(encodeAudioData);
         if (gpEncodeTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 7);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
         }
@@ -527,7 +579,7 @@ void stopAudioStreaming()
 
     if (gpEncodeTask != NULL) {
         printf("Stopping audio encode task...\n");
-        gpEncodeTask->~thread();
+        sem_post(&gStopEncodeTask);
         gpEncodeTask->join();
         delete gpEncodeTask;
         gpEncodeTask = NULL;
@@ -535,21 +587,20 @@ void stopAudioStreaming()
     }
     
     if (gpSendTask != NULL) {
-        // Wait for any on-going transmissions to complete
-        sleep(2);
-
         printf("Stopping audio send task...\n");
-        gpSendTask->~thread();
+        sem_post(&gStopSendTask);
         gpSendTask->join();
         delete gpSendTask;
         gpSendTask = NULL;
         printf("Audio send task stopped.\n");
     }
     
-    sem_destroy(&gUrtpDatagramReady);
     stopPcm();
     stopAudioStreamingConnection();
     stopTimer(gSecondTicker);
+    sem_destroy(&gUrtpDatagramReady);
+    sem_destroy(&gStopEncodeTask);
+    sem_destroy(&gStopSendTask);
 
     printf("Audio streaming stopped.\n");
 }

@@ -30,7 +30,7 @@ long long int getUSeconds(void)
 {
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
-    return ((long long int) ts.tv_sec * 1000000000L + ts.tv_nsec) / 1000;
+    return ((long long int) ts.tv_sec * 1000000000L + (long long int) ts.tv_nsec) / 1000;
 }
 
 // Get the address portion of a URL, leaving off the port number etc.

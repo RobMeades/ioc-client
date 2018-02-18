@@ -169,20 +169,6 @@ public:
 #    define BLOCK_DURATION_MS 20
 #   endif
 
-    /** In the case of the STM32F4 MCU, the position of the valid data
-     * inside a 64 byte audio sample can vary, hence the data format
-     * is established at startup. This is the number of votes (out of
-     * SAMPLES_PER_BLOCK audio samples), that we need the winning sample
-     * rotation to achieve when determining the position of the wanted
-     * audio data.  This value is tuned to take account of the fact that
-     * in the initial block of samples, from an ICS43434 microphone at
-     * least, there is a period of all 0xFF as the microphone itself
-     * starts up.
-     */
-#   ifndef ROTATION_VOTING_MARGIN
-#    define ROTATION_VOTING_MARGIN 200
-#   endif
-
     /** The number of bits that a sample is coded into for UNICAM.
      * Only 8 and 10 are supported, 8 is the default.
      */
@@ -563,45 +549,6 @@ protected:
      *                  24-bit format.
      */
     void fillMonoDatagramFromBlock(const uint32_t *rawAudio);
-
-    /** Establish where the wanted bits are in the raw
-     * audio stream.
-     *
-     * - The numbers on the I2S interface are 32
-     *   bits wide, left channel then right channel.
-     * - We only need the left channel, stereoSample
-     *   should point at the sample representing the
-     *   left channel.
-     * - Only 24 of the 32 bits are valid (see the Philips
-     *   format description lower down).
-     * - The I2S interface reads the data in 16 bit chunks.
-     * - This processor is little endian.
-     *
-     * What does that mean for getting the wanted bits?  Well,
-     * it is further complicated by the fact that the start
-     * of the DMA'd chunk can by anywhere in the sequence of
-     * I2S bytes.  All we know is that the pattern is going to
-     * be one of these:
-     *
-     * 23 01 xx 45 FF FF FF FF
-     * FF FF 23 01 xx 45 FF FF
-     * FF FF FF FF 23 01 xx 45
-     * xx 45 FF FF FF FF 23 01
-     *
-     * ...were xx, as far as I can tell, is always FF also, and
-     * the byte ordering for the wanted left channel is MSB 01,
-     * middle byte 23, LSB 45.
-     *
-     * Since it is expensive to keep checking for the pattern
-     * all the time, this should only be done at startup of the I2S
-     * interface.
-     *
-     * @param stereoSample   a pointer to a buffer of
-     *                       SAMPLES_PER_BLOCK * 2 uint32_t's
-     *                       (i.e. stereo).
-     * @return               the rotation value, from 0 to 3.
-     */
-    int getRotation(const uint32_t *stereoSample);
 
     /** For the UNICAM compression scheme, we need
      * the right shift operation to be arithmetic

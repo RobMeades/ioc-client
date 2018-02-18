@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <mutex>
 #include <thread>
+#include <semaphore.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/socket.h>
@@ -99,6 +100,9 @@ static struct sockaddr_in *gpLoggingServer = NULL;
 // A thread to run the log upload process.
 static std::thread *gpLogUploadThread = NULL;
 
+// Semaphore to stop the log upload task.
+static sem_t gStopLogUploadTask;
+
 // A buffer to hold some data that is required by the
 // log file upload thread.
 static LogFileUploadData *gpLogFileUploadData = NULL;
@@ -112,9 +116,9 @@ static void printLogItem(const LogEntry *pItem, unsigned int itemIndex)
 {
     if (pItem->event > gNumLogStrings) {
         printf("%.3f: out of range event at entry %d (%d when max is %d)\n",
-               (float) pItem->timestamp / 1000, itemIndex, pItem->event, gNumLogStrings);
+               (double) pItem->timestamp / 1000, itemIndex, pItem->event, gNumLogStrings);
     } else {
-        printf ("%6.3f: %s [%d] %d (%#x)\n", (float) pItem->timestamp / 1000,
+        printf ("%6.3f: %s [%d] %d (%#x)\n", (double) pItem->timestamp / 1000,
                 gLogStrings[pItem->event], pItem->event, pItem->parameter, pItem->parameter);
     }
 }
@@ -150,7 +154,7 @@ static FILE *newLogFile()
 }
 
 // Function to sit in a thread and upload log files.
-static void logFileUploadCallback()
+static void logFileUploadTask()
 {
     DIR *pDir;
     int x = 0;
@@ -176,7 +180,7 @@ static void logFileUploadCallback()
         // Send those log files, using a different TCP
         // connection for each one so that the logging server
         // stores them in separate files
-        while ((pDirEnt = readdir(pDir)) != NULL) {
+        while (((pDirEnt = readdir(pDir)) != NULL) && (sem_trywait(&gStopLogUploadTask) != 0)) {
             // Open the file, provided it's not the one we're currently logging to
             if ((!strcmp(pDirEnt->d_name, ".") && !strcmp(pDirEnt->d_name, "..")) &&
                 (pDirEnt->d_type == DT_REG) &&
@@ -252,6 +256,7 @@ static void logFileUploadCallback()
     gpLogFileUploadData = NULL;
     delete gpLoggingServer;
     gpLoggingServer = NULL;
+    sem_destroy(&gStopLogUploadTask);
 }
 
 /* ----------------------------------------------------------------
@@ -303,11 +308,12 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
     char *pBuf = new char[LOGGING_MAX_LEN_SERVER_URL];
     DIR *pDir;
     struct dirent *pDirEnt;
+    struct hostent *pHostEntries = NULL;
     int port;
     int x;
     int y;
     int z = 0;
-    const char * pCurrentLogFile = NULL;
+    const char *pCurrentLogFile = NULL;
 
     if (gpLogUploadThread == NULL) {
         // First, determine if there are any log files to be uploaded.
@@ -337,11 +343,14 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
                 getAddressFromUrl(pLoggingServerUrl, pBuf, LOGGING_MAX_LEN_SERVER_URL);
                 LOG(EVENT_DNS_LOOKUP, 0);
                 printf("[Looking for logging server URL \"%s\"...]\n", pBuf);
-                if (inet_pton(AF_INET, pBuf, gpLoggingServer) > 0) {
+                pHostEntries = gethostbyname(pBuf);
+                if (pHostEntries != NULL) {
+                    // Copy the network address to sockaddr_in structure
+                    memcpy(&(gpLoggingServer->sin_addr), pHostEntries->h_addr_list[0], pHostEntries->h_length);
                     printf("[Found it at IP address %s]\n", inet_ntoa(gpLoggingServer->sin_addr));
                     if (getPortFromUrl(pLoggingServerUrl, &port)) {
-                        gpLoggingServer->sin_port = port;
-                        printf("[Logging server port is %d]\n", gpLoggingServer->sin_port);
+                        gpLoggingServer->sin_port = htons(port);
+                        printf("[Logging server port is %d]\n", port);
                     } else {
                         printf("[WARNING: no port number was specified in the logging server URL (\"%s\")]\n",
                                 pLoggingServerUrl);
@@ -354,8 +363,9 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
                 gpLogFileUploadData = new LogFileUploadData();
                 gpLogFileUploadData->pCurrentLogFile = pCurrentLogFile;
                 // Note: this will be destroyed by the log file upload thread when it finishes
-                gpLogUploadThread = new std::thread(logFileUploadCallback);
+                gpLogUploadThread = new std::thread(logFileUploadTask);
                 if (gpLogUploadThread != NULL) {
+                    sem_init(&gStopLogUploadTask, false, 0);
                     printf("[Log file upload background task is now running]\n");
                     success = true;
                 } else {
@@ -382,7 +392,7 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
 void stopLogFileUpload()
 {
     if (gpLogUploadThread != NULL) {
-        gpLogUploadThread->~thread();
+        sem_post(&gStopLogUploadTask);
         gpLogUploadThread->join();
         delete gpLogUploadThread;
         gpLogUploadThread = NULL;
@@ -441,7 +451,7 @@ void flushLog()
 
 // This should be called periodically to write the log
 // to file, if a filename was provided to initLog().
-void writeLog()
+void writeLogCallback(size_t timerId, void *pUserData)
 {
     if (gLogMutex.try_lock()) {
         if (gpFile != NULL) {
@@ -470,7 +480,7 @@ void deinitLog()
 
     LOG(EVENT_LOG_STOP, LOG_VERSION);
     if (gpFile != NULL) {
-        writeLog();
+        writeLogCallback(0, NULL);
         flushLog(); // Just in case
         LOG(EVENT_LOG_FILE_CLOSE, 0);
         fclose(gpFile);
