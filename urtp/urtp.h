@@ -177,13 +177,14 @@ public:
 #   endif
 
     /** The maximum number of URTP datagrams that will be stored
-     * (old ones will be overwritten).
+     * (old ones will be overwritten).  With a block duration of
+     * 20 ms a value of 100 represents around 2 seconds.
      */
 #   ifndef MAX_NUM_DATAGRAMS
-#    define MAX_NUM_DATAGRAMS 100
+#    define MAX_NUM_DATAGRAMS 500
 #   endif
 
-    /* The desired number of unused bits to keep in the audio processing
+    /** The desired number of unused bits to keep in the audio processing
      * to avoid clipping when we can't move fast enough due to averaging.
      */
 #   ifndef AUDIO_DESIRED_UNUSED_BITS

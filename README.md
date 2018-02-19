@@ -260,7 +260,7 @@ Connect up your ICS43432 MEMS microphone, with the LR select pin grounded, and y
 
 If you touch the microphone while the recording is running you should see the VU meter displayed in the SSH window change.
 
-To make a proper capture you will need to configure for a mono microphone and a sensible recording level.  In your home directory, create a file called `/etc/asound.conf` with the following contents:
+To make a proper capture you will need to configure for a mono microphone and a sensible recording level.  Create a file called `/etc/asound.conf` with the following contents:
 
 ```
 pcm.mic_hw {
@@ -293,9 +293,9 @@ Check that your configuration is correct by making a recording with this newly d
 
 Now run `alsamixer`, call up the sound card menu by pressing `F6`, select `mems-mic` and then press the `TAB` key and set the Boost capture volume level (you can try using `F4` instead but that is often grabbed by the terminal program and hence may do other things).  Use the arrow keys to set a Boost of around 30 dB and press `ESC` to exit.
 
-Now run another recording and, hopefully, you will get a better sound level in your `test.wav` file.  Finally, to get a mono recording, use:
+Now run another recording and, hopefully, you will get a better sound level in your `test.wav` file.
 
-For the sections that follow, the device you want to stream audio from is `mic_hw`; the others are there simply to allow verification of correct configuration with `arecord`.
+For the sections that follow, the device you want to stream audio from is `mic_hw`; the others we have used above are simply to allow verification of correct configuration with `arecord`.
 
 Developing With ALSA
 ====================
@@ -327,7 +327,7 @@ Create a file `90-ioc.rules` in `/etc/udev/rules.d` with the following contents:
 
 ...replacing the values 001 and 006 as appropriate for your device.
 
-Note: for reasons I don't understand, `minicom` and `wvdial` didn't play will with my `/dev/modem` device: they seemed to lock it (with a lock file in `/var/lock/`, then be unable to use it but leave it locked.  So you will see below that I continued to use `/dev/ttyACM0` with those applications.  The rules file, though, is still required, see later on.
+Note: for reasons I don't understand, `minicom` and `wvdial` didn't play well with my `/dev/modem` device: they seemed to lock it (with a lock file in `/var/lock/`), then be unable to use it but leave it locked.  So you will see below that I continued to use `/dev/ttyACM0` with those applications.  The rules file, though, is still required, see later on.
 
 Run `minicom` with:
 
@@ -339,7 +339,7 @@ Now install PPP and a dialler with:
 
 `sudo apt-get install ppp wvdial`
 
-Edit the file `/etc/wvdial.conf` for your modem.  For my u-blox modem (on a Hologram USB stick with a Hologram SIM) I used:
+Edit the file `/etc/wvdial.conf` for your modem.  For my u-blox modem (on a Hologram USB stick with a Hologram SIM and hence a `hologram` APN) I used:
 
 ```
 [Dialer Defaults]
@@ -488,11 +488,11 @@ Enable the tunnel to start at boot with:
 
 `sudo systemctl enable urtp-tunnel`
 
-Reboot and check that the tunnel is open (this will be over Ethernet).  If that is successful, enable the cellular service to start at boot:
+Reboot and check that the tunnel is open (this will be over Ethernet).  If that is successful, enable the cellular service to start at boot with:
 
 `sudo systemctl enable cellular`
 
-Reboot without Ethernet/wifi connectivity from the Raspberry Pi and check that the tunnel opens over the cellular connection.  If you have any issues, use `systemctl status cellular` and `journalctl -b` to find out what's up.
+Reboot without Ethernet/wifi connectivity from the Raspberry Pi and check that the tunnel opens over the cellular connection.  If you have any issues, use `sudo systemctl status cellular` and `journalctl -b` to find out what's up.
 
 FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo systemctl stop cellular` TO STOP IT.  If you want to be sure you don't waste money, disable this until you really need it with:
 
