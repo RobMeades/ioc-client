@@ -500,7 +500,7 @@ FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo syst
 
 ...and of course run `sudo systemctl stop cellular` to stop the current instance.  Or just leave the cellular modem disconnected from the Raspberry Pi, to be quite sure.
 
-If you need to open other tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemctl unit file for the additional tunnels.
+If you need to open other tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemd unit file for the additional tunnels.
 
 Once you have everything running sweetly, create another `systemctl` unit file that starts the `ioc-cient` at boot by creating a file called something like `/lib/systemd/system/ioc-client.service` with contents something like:
 
@@ -603,5 +603,23 @@ Install `nginx` with:
 
 `sudo apt-get install nginx`
 
-Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with `Welcome to nginx!` on the top in large friendly letters.
+Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
+
+Control Over Cellular
+=====================
+Having sorted the DNS situation and installed a web server, it is possible to control things on the Raspberry Pi via HTTP.  However there is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
+
+The command you want will be of the following form:
+
+ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/pi/ioc -p zzzz user@url
+
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
+
+Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.
+
+You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
+
+`ssh -p xxxx -l pi_user localhost`
+
+...where `xxxx` is the listening port on the remote machine and `pi_user` is your username on the Raspberry Pi.
 
