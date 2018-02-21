@@ -6,6 +6,29 @@ This Internet of Chuffs client is designed to stream audio from an I2S microphon
 ## Raspbian
 First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default username `pi` and default password `raspberry`).
 
+## Set Up A User
+Next, setup an admin user as follows:
+
+`sudo adduser username`
+
+...where `username` is replaced by the user you wish to add.  Add this to all the groups that are around with:
+
+`sudo usermod username -a -G pi,adm,dialout,cdrom,sudo,audio,video,plugdev,games,users,input,netdev,spi,i2c,gpio`
+
+...where `username` is replaced by the user you added above.
+
+Add this user to the sudo group by creating a file `/etc/sudoers.d/sudoers` and putting in it the single line `username  ALL=(ALL) ALL` (where `username` is replaced by the username you added above).
+
+Set the permissions on that file to 0440 with:
+
+`sudo chmod 0440 /etc/sudoers.d/sudoers`
+
+Logout, log in again as the new user and verify that you can become root with:
+
+`su -i`
+
+
+
 ## Configure I2S
 Configuration of the I2S interface on the Raspberry Pi is based on the instructions that can be found here:
 
@@ -387,7 +410,6 @@ You'll get something like:
 root       968  0.1  0.3   7228  3444 pts/0    S    21:10   0:00 sudo wvdial
 root       972  0.2  0.4  10588  4240 pts/0    S    21:10   0:00 wvdial
 root       973  0.0  0.2   3996  2068 pts/0    S    21:10   0:00 /usr/sbin/pppd 460800 modem crtscts defaultroute usehostname -detach user blank noipdefault call wvdial usepeerdns idle 0 logfd 6
-pi        1036  0.0  0.0   4372   576 pts/0    S+   21:10   0:00 grep --color=auto wvdial
 ```
 Find the task number against the line `sudo wvdial` and kill that task; in my case:
 
@@ -396,23 +418,23 @@ Find the task number against the line `sudo wvdial` and kill that task; in my ca
 You now have proven cellular connectivity.
 
 # Connecting To A Server
-Before completing this section you will need to set up the server-side of the IOC, for which see https://github.com/RobMeades/ioc-server.
+Before completing this section you will need to set up the server-side of the IoC, for which see https://github.com/RobMeades/ioc-server.
 
 Generate a key pair:
 
-`ssh-keygen -f ~/ioc -t ecdsa -b 521`
+`ssh-keygen -f ~/ioc-client-key -t ecdsa -b 521`
 
-Don't add a passphrase as we will need the Raspberry Pi to be able to use the key without manual passphrase entry.  Make sure the Raspberry Pi is on-line and copy the public key to the server with:
+Don't add a pass-phrase as we will need the Raspberry Pi to be able to use the key without manual pass-phrase entry.  Make sure the Raspberry Pi is on-line and copy the public key to the server with:
 
-`ssh-copy-id -i ~/ioc user@host`
+`ssh-copy-id -i ~/ioc-client-key user@host`
 
 ...replacing `user` with your username on the server and `host` with the IP address of the server.
 
 Make sure that you can log in to the server from the Raspberry Pi using SSH and this key with:
 
-`ssh -i ~/ioc user@host -p xxxx`
+`ssh -i ~/ioc-client-key user@host -p xxxx`
 
-...again replacing `user` and `host` with the username and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
+...again replacing `user` and `host` with the user name and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
 
 # Boot Setup
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
@@ -435,9 +457,9 @@ Alias=cellular.service
 ```
 Note: if you have trouble with `wvdial`, change the ExecStart line to something like:
 
-`ExecStart=wvdial > /home/pi/wvdial.log 2>&1`
+`ExecStart=wvdial > /home/username/wvdial.log 2>&1`
  
-...to get log output.
+...where `username` is replaced by your user name, to get log output.
  
 Edit the `/etc/udev/rules.d/90-ioc.rules` file you created above for the modem device so that it contains:
 
@@ -460,14 +482,14 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L xxxx:localhost:yyyy -i /home/pi/ioc -p zzzz user@host
+ExecStart=/usr/bin/ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@host
 Restart=on-failure
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 ```
-...replacing `user` with your username on the server, `host` with the IP address/URL of the server, using `-p zzzz` if SSH is not on port 22, replacing `xxxx` with the local port for the SSH tunnel and `yyyy` with the remote port on the server for the SSH tunnel.
+...replacing `user` with your username on the server, `host` with the IP address/URL of the server, `username` is replaced by your user name, using `-p zzzz` if SSH is not on port 22, replacing `xxxx` with the local port for the SSH tunnel and `yyyy` with the remote port on the server for the SSH tunnel.
 
 Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will add the finger-print of the server to the root account.
 
@@ -487,7 +509,7 @@ Reboot and check that the tunnel is open (this will be over Ethernet).  If that 
 
 Reboot without Ethernet/wifi connectivity from the Raspberry Pi and check that the tunnel opens over the cellular connection.  If you have any issues, use `sudo systemctl status cellular` and `journalctl -b` to find out what's up.
 
-FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo systemctl stop cellular` TO STOP IT.  If you want to be sure you don't waste money, disable this until you really need it with:
+**FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo systemctl stop cellular` TO STOP IT**.  If you want to be sure you don't waste money, disable this until you really need it with:
 
 `sudo systemctl disable cellular`
 
@@ -495,21 +517,21 @@ FROM NOW ON YOUR CELLULAR MODEM WILL CONNECT AT BOOT AND YOU MUST RUN `sudo syst
 
 If you need to open other tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemd unit file for the additional tunnels.
 
-Once you have everything running sweetly, create another `systemctl` unit file that starts the `ioc-cient` at boot by creating a file called something like `/lib/systemd/system/ioc-client.service` with contents something like:
+Once you have everything running sweetly, create another `systemctl` unit file that starts the `ioc-client` at boot by creating a file called something like `/lib/systemd/system/ioc-client.service` with contents something like:
 
 ```
 [Unit]
 Description=IoC client
 
 [Service]
-ExecStart=/home/pi/ioc-client mic ioc_server.com:port -ls log_server:port
+ExecStart=/home/username/ioc-client mic ioc_server.com:port -ls log_server:port -ld log_directory_path
 Restart=on-failure
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 ```
-...where `/home/pi/` is the path to the location of the `ioc-client` executable, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the IoC server application is running and `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running.
+...where `/home/username/` is the path to the location of the `ioc-client` executable, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the IoC server application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
 
 Test that it works with:
 
@@ -599,15 +621,15 @@ Having sorted the DNS situation and installed a web server, it is possible to co
 
 The command you want will be of the following form:
 
-ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/pi/ioc -p zzzz user@url
+ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url
 
-...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
 
-Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.
+Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with `curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
 
 You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
 
-`ssh -p xxxx -l pi_user localhost`
+`ssh -p xxxx -l username localhost`
 
-...where `xxxx` is the listening port on the remote machine and `pi_user` is your username on the Raspberry Pi.
+...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
 
