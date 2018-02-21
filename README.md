@@ -1,13 +1,12 @@
-Introduction
-============
+# Introduction
+
 This Internet of Chuffs client is designed to stream audio from an I2S microphone (e.g. the ICS43432 MEMS microphone) connected to a Raspberry Pi over a cellular interface to an [ioc-server](https://github.com/RobMeades/ioc-server).  The instructions below cover the entire installation of the Raspberry Pi side of the system, including testing that the whole system works.
 
-Load Raspbian
-=============
+# Linux Configuration
+## Raspbian
 First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default username `pi` and default password `raspberry`).
 
-Configure I2S
-=============
+## Configure I2S
 Configuration of the I2S interface on the Raspberry Pi is based on the instructions that can be found here:
 
 http://www.raspberrypi.org/forums/viewtopic.php?f=44&t=91237
@@ -18,8 +17,7 @@ Edit `/boot/config.txt` to make sure that the following two lines are not commen
 dtparam=audio=on
 dtparam=i2s=on
 ```
-Build And Load The ICS43432 Microphone Driver
-=============================================
+## Build And Load The ICS43432 Microphone Driver
 Next we need to build and load the ICS43432 microphone driver.  This is already available as part of the Linux source tree but is not built or loaded by default.
 
 These steps are based on this blog post:
@@ -235,8 +233,7 @@ ip_tables              13161  0
 x_tables               20578  1 ip_tables
 ipv6                  408900  24
 ```
-Connect An ICS43432 MEMS Microphone
-===================================
+## Connect An ICS43432 MEMS Microphone
 The pins you need on the Raspberry Pi header are as follows:
 
 * Pin 12: I2S clock
@@ -297,14 +294,12 @@ Now run another recording and, hopefully, you will get a better sound level in y
 
 For the sections that follow, the device you want to stream audio from is `mic_hw`; the others we have used above are simply to allow verification of correct configuration with `arecord`.
 
-Developing With ALSA
-====================
+## Developing With ALSA
 This code is linked against the ALSA libraries so you'll need the ALSA development package.  Get this with:
 
 `sudo apt-get install libasound2-dev`
 
-Using A USB Modem
-=================
+## Using A USB Modem
 Install `minicom` with:
 
 `sudo apt-get install minicom`
@@ -400,8 +395,7 @@ Find the task number against the line `sudo wvdial` and kill that task; in my ca
 
 You now have proven cellular connectivity.
 
-Connecting To A Server
-======================
+# Connecting To A Server
 Before completing this section you will need to set up the server-side of the IOC, for which see https://github.com/RobMeades/ioc-server.
 
 Generate a key pair:
@@ -420,8 +414,7 @@ Make sure that you can log in to the server from the Raspberry Pi using SSH and 
 
 ...again replacing `user` and `host` with the username and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
 
-Boot Setup
-==========
+# Boot Setup
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
 
 ```
@@ -530,12 +523,10 @@ Finally, enable it to start at boot with:
 
 `sudo systemctl enable ioc-client`
 
-Server Side
-===========
+# Server Side
 Follow the instructions at https://github.com/RobMeades/ioc-server.
 
-Debugging End To End Connectivity
-==================================
+# Debugging End To End Connectivity
 If you find that the SSH tunnel won't connect or there are other end-to-end connectivity issues, try falling back to basic TCP testing with `netcat`.  On the server side run:
 
 `netcat -v -l xxxx`
@@ -548,8 +539,7 @@ If you find that the SSH tunnel won't connect or there are other end-to-end conn
 
 If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
 
-Remote Access
-=============
+# Remote Access
 I set up the Raspberry Pi to use a DDSN account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
 ```
@@ -597,16 +587,14 @@ Your www.noip.com account should show that the update client has been in contact
 
 ...and by checking once more that your www.noip.com account shows that the update client has been in contact.
 
-Web Server Setup
-================
+# Web Server Setup
 Install `nginx` with:
 
 `sudo apt-get install nginx`
 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
-Control Over Cellular
-=====================
+# Control Over Cellular
 Having sorted the DNS situation and installed a web server, it is possible to control things on the Raspberry Pi via HTTP.  However there is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
