@@ -13,7 +13,7 @@ Next, setup an admin user as follows:
 
 ...where `username` is replaced by the user you wish to add.  Add this to all the groups that are around with:
 
-`sudo usermod username -a -G pi,adm,dialout,cdrom,sudo,audio,video,plugdev,games,users,input,netdev,spi,i2c,gpio`
+`sudo usermod username -a -G adm,dialout,cdrom,sudo,audio,video,plugdev,games,users,input,netdev,spi,i2c,gpio`
 
 ...where `username` is replaced by the user you added above.
 
@@ -27,7 +27,9 @@ Logout, log in again as the new user and verify that you can become root with:
 
 `su -i`
 
+Assuming you can, remove the `pi` user with:
 
+`sudo deluser pi`
 
 ## Configure I2S
 Configuration of the I2S interface on the Raspberry Pi is based on the instructions that can be found here:
@@ -455,7 +457,7 @@ StandardOutput=null
 WantedBy=multi-user.target
 Alias=cellular.service
 ```
-Note: if you have trouble with `wvdial`, change the ExecStart line to something like:
+Note: if you have trouble with `wvdial`, change the `ExecStart` line to something like:
 
 `ExecStart=wvdial > /home/username/wvdial.log 2>&1`
  
@@ -489,7 +491,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 ```
-...replacing `user` with your username on the server, `host` with the IP address/URL of the server, `username` is replaced by your user name, using `-p zzzz` if SSH is not on port 22, replacing `xxxx` with the local port for the SSH tunnel and `yyyy` with the remote port on the server for the SSH tunnel.
+...replacing `xxxx` with the local port for the SSH tunnel, `yyyy` with the remote port on the server for the SSH tunnel, `username` is replaced by your user name on the Raspberry Pi, using `-p zzzz` if SSH is not on port 22, `user` with your username on the server and`host` with the IP address/URL of the server.
 
 Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will add the finger-print of the server to the root account.
 
@@ -531,7 +533,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 ```
-...where `/home/username/` is the path to the location of the `ioc-client` executable, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the IoC server application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
+...where `username` is replaced by your user name on the Raspberry Pi, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
 
 Test that it works with:
 
@@ -562,7 +564,7 @@ If you find that the SSH tunnel won't connect or there are other end-to-end conn
 If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
 
 # Remote Access
-I set up the Raspberry Pi to use a DDSN account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
+I set up the Raspberry Pi to use a DDNS account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
 ```
 wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
@@ -621,11 +623,13 @@ Having sorted the DNS situation and installed a web server, it is possible to co
 
 The command you want will be of the following form:
 
-ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
 
-...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
 
-Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with `curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
+Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
+
+`curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
 
 You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
 
