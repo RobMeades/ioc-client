@@ -163,6 +163,9 @@ int main(int argc, char *argv[])
             sigIntHandler.sa_flags = 0;
             sigaction(SIGINT, &sigIntHandler, NULL);
 
+            // Initialise the timers
+            initTimers();
+
             // Initialise logging
             initLog(gLogBuffer);
             initLogFile(pLogFilePath);

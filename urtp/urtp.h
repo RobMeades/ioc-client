@@ -197,6 +197,12 @@ public:
 #    define AUDIO_MAX_SHIFT_BITS 12
 #   endif
 
+    // Thresholding: audio levels that are within +/- this value
+    // are not shifteed.  Set to 0 for no thresholding.
+#   ifndef AUDIO_SHIFT_THRESHOLD
+#    define AUDIO_SHIFT_THRESHOLD 30
+#   endif
+
     /** The number of samples in BLOCK_DURATION_MS.  Note that a
      * sample is stereo when the audio is in raw form but is reduced
      * to mono when we organise it into URTP packets, hence the size

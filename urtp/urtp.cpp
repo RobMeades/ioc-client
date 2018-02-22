@@ -88,10 +88,12 @@ int Urtp::processAudio(int monoSample)
 
     //LOG(EVENT_MONO_SAMPLE_UNUSED_BITS, unusedBits);
 
-    if (_audioShiftFixed >= 0) {
-        monoSample <<= _audioShiftFixed;
-    } else {
-        monoSample <<= _audioShift;
+    if (absSample > AUDIO_SHIFT_THRESHOLD) {
+        if (_audioShiftFixed >= 0) {
+            monoSample <<= _audioShiftFixed;
+        } else {
+            monoSample <<= _audioShift;
+        }
     }
 
     // Add the new unused bits count to the buffer and

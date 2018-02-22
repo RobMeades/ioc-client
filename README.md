@@ -2,12 +2,12 @@
 
 This Internet of Chuffs client is designed to stream audio from an I2S microphone (e.g. the ICS43432 MEMS microphone) connected to a Raspberry Pi over a cellular interface to an [ioc-server](https://github.com/RobMeades/ioc-server).  The instructions below cover the entire installation of the Raspberry Pi side of the system, including testing that the whole system works.
 
-# Linux Configuration
+# Initial Linux Configuration
 ## Raspbian
-First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default username `pi` and default password `raspberry`).
+First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default user name `pi` and default password `raspberry`).
 
 ## Set Up A User
-Next, setup an admin user as follows:
+Next, set up an admin user as follows:
 
 `sudo adduser username`
 
@@ -17,7 +17,7 @@ Next, setup an admin user as follows:
 
 ...where `username` is replaced by the user you added above.
 
-Add this user to the sudo group by creating a file `/etc/sudoers.d/sudoers` and putting in it the single line `username  ALL=(ALL) ALL` (where `username` is replaced by the username you added above).
+Add this user to the sudo group by creating a file `/etc/sudoers.d/sudoers` and putting in it the single line `username  ALL=(ALL) ALL` (where `username` is replaced by the user you added above).
 
 Set the permissions on that file to 0440 with:
 
@@ -39,6 +39,7 @@ http://www.raspberrypi.org/forums/viewtopic.php?f=44&t=91237
 Edit `/boot/config.txt` to make sure that the following two lines are not commented-out:
 
 ```
+#  Add audio and I2S audio at that
 dtparam=audio=on
 dtparam=i2s=on
 ```
@@ -217,10 +218,12 @@ sudo cp i2s-soundcard.dtbo /boot/overlays
 ```
 [Note: ignore the warnings that the dtc compilation process throws up].
 
-Finally, edit the file `/boot/config.txt` to append the line:
+Finally, edit the file `/boot/config.txt` to append the lines:
 
-`dtoverlay=i2s-soundcard,alsaname=mems-mic`
-
+```
+# Add the MEMS microphone
+dtoverlay=i2s-soundcard,alsaname=mems-mic
+```
 Now reboot and then check for sound cards with:
 
 `arecord -l`
@@ -324,7 +327,58 @@ This code is linked against the ALSA libraries so you'll need the ALSA developme
 
 `sudo apt-get install libasound2-dev`
 
-## Using A USB Modem
+## Download and Build ioc-client
+Clone this repo with:
+
+`git clone https://github.com/RobMeades/ioc-client`
+
+Change to the `ioc-client` directory and run:
+
+`sudo make`
+
+You should end up with the binary `~/ioc-client/Debug/ioc-client`.
+
+# Connecting To A Server
+Before completing this section you will need to set up the server-side of the IoC, for which see https://github.com/RobMeades/ioc-server.  At this point you don't need the cellular interface connected provided there is some form of internet connectivity from your Raspberry Pi, e.g. Ethernet or Wifi.
+
+Generate a key pair:
+
+`ssh-keygen -f ~/ioc-client-key -t ecdsa -b 521`
+
+Don't add a passphrase as we will need the Raspberry Pi to be able to use the key without manual passphrase entry.  Make sure the Raspberry Pi is on-line and copy the public key to the server with:
+
+`ssh-copy-id -i ~/ioc-client-key user@host`
+
+...replacing `user` with your username on the server and `host` with the IP address of the server.
+
+Make sure that you can log in to the server from the Raspberry Pi using SSH and this key with:
+
+`ssh -i ~/ioc-client-key user@host -p xxxx`
+
+...again replacing `user` and `host` with the user name and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
+
+# Debugging End To End Connectivity
+If you find that an SSH tunnel won't connect or there are other end-to-end connectivity issues, try falling back to basic TCP testing with `netcat`.  On the server side run:
+
+`netcat -v -l xxxx`
+
+...where `xxxx` is the port number to listen on.  If the SSH server is active on port 22 then stop it first, or maybe just try a different port number to start with.  On the client side run:
+
+`netcat -v host xxxx`
+
+...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side netcat line on another Linux server on the internet, just to be sure that the server is visible.
+
+If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
+
+# Using A USB Modem
+First, edit `/boot/config.txt` to append the lines:
+
+```
+# Allow more power to be drawn from the USB ports, needed for cellular modem
+max_usb_current=1
+```
+You'll find you need this in poor coverage conditions as cellular can draw more power than the Pi usually provides.  Then reboot.
+
 Install `minicom` with:
 
 `sudo apt-get install minicom`
@@ -402,7 +456,7 @@ You should see the AT commands go past, all followed by nice `OK`'s from the mod
 --> secondary DNS address 212.9.0.136
 --> pppd: ▒[07]R
 ```
-...and the screen should stop scrolling.  Press `<enter>` to get back to the command prompt and type `ifconfig`.  You should now have a `ppp0` connection as well as the usual `eth0` etc.  To disconnect the PPP link and stop running-up your cellular bill, enter:
+...and the screen should stop scrolling.  Press <enter> to get back to the command prompt and type `ifconfig`.  You should now have a `ppp0` connection as well as the usual `eth0` etc.  To disconnect the PPP link and stop running-up your cellular bill, enter:
 
 `ps aux | grep wvdial`
 
@@ -417,26 +471,13 @@ Find the task number against the line `sudo wvdial` and kill that task; in my ca
 
 `sudo kill 968`
 
+You might have to:
+
+`sudo kill 973`
+
+...also.
+
 You now have proven cellular connectivity.
-
-# Connecting To A Server
-Before completing this section you will need to set up the server-side of the IoC, for which see https://github.com/RobMeades/ioc-server.
-
-Generate a key pair:
-
-`ssh-keygen -f ~/ioc-client-key -t ecdsa -b 521`
-
-Don't add a pass-phrase as we will need the Raspberry Pi to be able to use the key without manual pass-phrase entry.  Make sure the Raspberry Pi is on-line and copy the public key to the server with:
-
-`ssh-copy-id -i ~/ioc-client-key user@host`
-
-...replacing `user` with your username on the server and `host` with the IP address of the server.
-
-Make sure that you can log in to the server from the Raspberry Pi using SSH and this key with:
-
-`ssh -i ~/ioc-client-key user@host -p xxxx`
-
-...again replacing `user` and `host` with the user name and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
 
 # Boot Setup
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
@@ -491,9 +532,9 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 ```
-...replacing `xxxx` with the local port for the SSH tunnel, `yyyy` with the remote port on the server for the SSH tunnel, `username` is replaced by your user name on the Raspberry Pi, using `-p zzzz` if SSH is not on port 22, `user` with your username on the server and`host` with the IP address/URL of the server.
+...replacing `xxxx` with the local port for the SSH tunnel, `yyyy` with the remote port on the server for the SSH tunnel, `username` with your user name on the Raspberry Pi, adding `-p zzzz` if SSH is not on port 22, replacing `user` with your user name on the server and `host` with the IP address/URL of the server.
 
-Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will add the finger-print of the server to the root account.
+Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will add the fingerprint of the server to the root account.
 
 Now test that the tunnel comes up correctly with:
 
@@ -526,9 +567,10 @@ Once you have everything running sweetly, create another `systemctl` unit file t
 Description=IoC client
 
 [Service]
-ExecStart=/home/username/ioc-client mic ioc_server.com:port -ls log_server:port -ld log_directory_path
+ExecStart=/home/username/ioc-client/Debug/ioc-client mic ioc_server.com:port -ls log_server:port -ld log_directory_path
 Restart=on-failure
 RestartSec=3
+KillSig=SIGINT
 
 [Install]
 WantedBy=multi-user.target
@@ -546,22 +588,6 @@ Test that it works with:
 Finally, enable it to start at boot with:
 
 `sudo systemctl enable ioc-client`
-
-# Server Side
-Follow the instructions at https://github.com/RobMeades/ioc-server.
-
-# Debugging End To End Connectivity
-If you find that the SSH tunnel won't connect or there are other end-to-end connectivity issues, try falling back to basic TCP testing with `netcat`.  On the server side run:
-
-`netcat -v -l xxxx`
-
-...where `xxxx` is the port number to listen on.  If the SSH server is active on port 22 then stop it first, or maybe just try a different port number to start with.  On the client side run:
-
-`netcat -v host xxxx`
-
-...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side netcat line on another Linux server on the internet, just to be sure that the server is visible.
-
-If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
 
 # Remote Access
 I set up the Raspberry Pi to use a DDNS account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
@@ -636,4 +662,7 @@ You might want to do a similar thing to allow SSH/SFTP access for the Raspberry 
 `ssh -p xxxx -l username localhost`
 
 ...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
+
+# A Note On the File boot/config.txt
+I have seen my Raspberry Pi reset `boot/config.txt` to be an empty file.  Now that you've got all this working, I recommend that you back it up.
 
