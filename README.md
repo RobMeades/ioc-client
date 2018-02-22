@@ -328,6 +328,10 @@ This code is linked against the ALSA libraries so you'll need the ALSA developme
 `sudo apt-get install libasound2-dev`
 
 ## Download and Build ioc-client
+Install git with:
+
+`sudo apt-get install git`
+
 Clone this repo with:
 
 `git clone https://github.com/RobMeades/ioc-client`
@@ -567,7 +571,7 @@ Once you have everything running sweetly, create another `systemctl` unit file t
 Description=IoC client
 
 [Service]
-ExecStart=/home/username/ioc-client/Debug/ioc-client mic ioc_server.com:port -ls log_server:port -ld log_directory_path
+ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path
 Restart=on-failure
 RestartSec=3
 KillSig=SIGINT
@@ -575,7 +579,7 @@ KillSig=SIGINT
 [Install]
 WantedBy=multi-user.target
 ```
-...where `username` is replaced by your user name on the Raspberry Pi, `mic` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
+...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
 
 Test that it works with:
 
