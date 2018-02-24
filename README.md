@@ -353,8 +353,14 @@ Change to the `ioc-client` directory and run:
 
 You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
-# Connecting To A Server
-Before completing this section you will need to set up the server-side of the IoC, for which see https://github.com/RobMeades/ioc-server.  At this point you don't need the cellular interface connected provided there is some form of internet connectivity from your Raspberry Pi, e.g. Ethernet or Wifi.
+If you have the server-side of the IoC set up somewhere according to the instructions at https://github.com/RobMeades/ioc-server, and preferable also got a log server application running on the same remote machine (see instructions at https://github.com/RobMeades/ioc-log) you should now be able to connect to them with:
+
+`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path"
+
+...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
+
+# Making A Secure Connection
+To do this you need to set up an SSH tunnel to the server.
 
 Generate a key pair:
 
@@ -372,7 +378,7 @@ Make sure that you can log in to the server from the Raspberry Pi using SSH and 
 
 ...again replacing `user` and `host` with the user name and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
 
-# Debugging End To End Connectivity
+# Debugging SSH Connectivity
 If you find that an SSH tunnel won't connect or there are other end-to-end connectivity issues, try falling back to basic TCP testing with `netcat`.  On the server side run:
 
 `netcat -v -l xxxx`
@@ -514,7 +520,7 @@ Once you've got the tunnel working, create a file called something like `/etc/sy
 
 `curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
 
-You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
+You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your user name on the Raspberry Pi:
 
 `ssh -p xxxx -l username localhost`
 
@@ -539,7 +545,7 @@ StandardOutput=null
 WantedBy=multi-user.target
 Alias=cellular.service
 ```
-Note: if you have trouble with `wvdial`, change the `ExecStart` line to something like:
+Note: if you have trouble with `wvdial`, try temporarily changing the `ExecStart` line to something like:
 
 `ExecStart=wvdial > /home/username/wvdial.log 2>&1`
  
@@ -678,17 +684,14 @@ Your www.noip.com account should show that the update client has been in contact
 
 ...and by checking once more that your www.noip.com account shows that the update client has been in contact.
 
-# A Note On the File boot/config.txt
-I have seen my Raspberry Pi reset `boot/config.txt` to be an empty file.  Now that you've got all this working, I recommend that you back it up.
-
 # Preventing Disk Corruption On Removal Of Power Without Shut Down
-If power is removed from the Raspberry Pi before it has shut down there is a chance of SD card corruption.  And shutting the Raspberry Pi down in an organised way is not always possible.  One way to solve this conundrum is to put all the areas of the file system that must be written to into RAM and then make the SD card read-only.  This section describes how to do that based on:
+If power is removed from the Raspberry Pi before it has shut down there is a chance of SD card corruption.  And shutting the Raspberry Pi down in an organised way is not always possible.  One way to solve this conundrum is to put all the areas of the file system that must be written to into RAM and then make the SD card read-only.  This section describes how to do that based on this advice:
 
 https://narcisocerezo.wordpress.com/2014/06/25/create-a-robust-raspberry-pi-setup-for-24x7-operation/
 http://blog.gegg.us/2014/03/a-raspbian-read-only-root-fs-howto/
 https://www.raspberrypi.org/forums/viewtopic.php?f=28&t=154843
 
-ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) or [dd](http://www.chrysocome.net/dd) before starting this process so that you can go back to that image in case of boot errors.  And of course, with this done, you will not be able to write changes to disk persistently so only do it once you've stopped fiddling with the set up.
+ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) or [dd](http://www.chrysocome.net/dd) before starting this process so that you can go back to that image in case of boot errors.  And of course, with this done, you will not normally be able to write changes to disk persistently so only do it once you've stopped fiddling with the set up.
 
 Open `/etc/fstab` in your favourite editor.  It will look something like:
 
@@ -717,7 +720,7 @@ tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m 
 tmpfs    /var/lib/sudo      tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 tmpfs    log_directory_path tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 ```
-...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive.
+...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see `Saving Logs Safely` below.
 
 Remove temporary `fake-hwclock` files by editing `/etc/cron.hourly/fake-hwclock` and putting the following as the first executable line after the initial comments:
 
@@ -753,3 +756,126 @@ If you ever need to write to disk, update any packages, etc., remount `root` as 
 ...or remount `boot` as writeable with:
 
 `sudo mount -o remount,rw /boot`
+
+# Saving Logs Persistently With Read Only Root,
+If you wish to retain robustness of the Linux by following the procedures of the previous section but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  This will require a Linux machine (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  These instructions are based on the those here:
+
+https://www.howtoforge.com/linux_resizing_ext3_partitions
+
+Before starting, make another backup of your SD card that you can return to in case of failure.  Then take the SD card out of the Raspberry Pi and put it into your other Linux machine.
+
+Run `df -h` and you should see two new devices in the list, something like:
+
+```
+/dev/sdb2        7583416  2505940   4736720  35% /media/rob/rootfs
+/dev/sdb1          41853    21333     20520  51% /media/rob/boot
+```
+...and if you run `sudo fdisk -l` you should see additional information for those devices, something like:
+
+```
+Device     Boot Start      End  Sectors  Size Id Type
+/dev/sdb1        8192    93236    85045 41.5M  c W95 FAT32 (LBA)
+/dev/sdb2       94208 15564799 15470592  7.4G 83 Linux
+```
+Depending on the number of disks attached to your machine it may come up as `/dev/sdc1` and `/dev/sdc2`, etc.  In the remainder of these instructions we will use `/dev/sdX`; replace the `X` with the correct drive letter for you.
+
+First we need to shrink the Linux partition, so unmount it with:
+
+`umount /dev/sdX2`
+
+Remove the journal from that partition (making it an `ext2` partition so that `resize2fs` can run on it) with:
+
+`sudo tune2fs -O ^has_journal /dev/sdX2`
+
+Then run `sudo e2fsck -f /dev/sdX2` to make sure that all is OK.  The output should look something like this:
+
+```
+e2fsck 1.42.13 (17-May-2015)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+rootfs: 115851/474240 files (0.1% non-contiguous), 656263/1933824 blocks
+```
+We can now reduce this partition in size; I chose 6 gigabytes:
+
+`sudo resize2fs /dev/sdX2 6000M`
+
+This may take a few minutes to complete.  Take a note of the output, which will be something like:
+
+```
+resize2fs 1.42.13 (17-May-2015)
+Resizing the filesystem on /dev/sdb2 to 1536000 (4k) blocks.
+The filesystem on /dev/sdb2 is now 1536000 (4k) blocks long.
+```
+Now you can delete and recreate the partition to match (with no loss of data).  Run `fdisk` with:
+
+`sudo fdisk /dev/sdX`
+
+Note: this is run on the disk and not the partition, hence no number at the end.
+
+Press `p` to print the partition list, getting an output for our partitions something like:
+
+```
+/dev/sdb1        8192    93236    85045 41.5M  c W95 FAT32 (LBA)
+/dev/sdb2       94208 15564799 15470592  7.4G 83 Linux
+```
+It will also give you the sector size in bytes, which you should note (for me it was 512 bytes).
+
+Delete partition number 2 with `d` followed by `2`.  Then re-create partition 2 with the commands `n`, `p`, `2`.  Set the first sector to be the same as it was before; in my case 94208. For the end of the partition you need to work out the correct number.  From the `resize2fs` output the size in my case was 1536000 x 4096 bytes, which is 6291456000 bytes.  At 512 bytes per sector that comes to exactly 12288000 sectors.  Add to this the start sector and I get 12382208.  So the end sector is 12382208 - 1, which is 12382207.
+
+Write the new partition information and exit `fdisk` with the command `w`.  Run `sudo partprobe /dev/sdX` to re-read the new partition information and then switch journaling back on with `sudo tune2fs -j /dev/sdX2`.
+
+Now we can create a new partition in the space we have freed up. Run `fdisk` once more:
+
+`sudo fdisk /dev/sdX`
+
+...and print the partition list with the command `p`:
+
+```
+/dev/sdb1        8192    93236    85045 41.5M  c W95 FAT32 (LBA)
+/dev/sdb2       94208 12382207 12288000  5.9G 83 Linux
+```
+Create the new partition with the commands `n`, `p`, `3`.  The start sector for the new partition, from the calculations above, was 12382208 in my case.  Accept the default for the final sector (in my case `15564799`).  Write the new partition and exit `fdisk` with the command `w`.    Run `sudo partprobe /dev/sdX` to re-read the new partition information.  Now if you run `sudo fdisk -l` you should see something like:
+
+```
+/dev/sdb1           8192    93236    85045 41.5M  c W95 FAT32 (LBA)
+/dev/sdb2          94208 12382207 12288000  5.9G 83 Linux
+/dev/sdb3       12382208 15564799  3182592  1.5G 83 Linux
+```
+Finally, format the new partition with:
+
+`sudo mkfs.ext4 /dev/sdX3`
+
+Put the SD card back in the Raspberry Pi.  If you have previously made the root file system read-only, temporarily make it writeable with:
+
+`sudo mount -o remount,rw /`
+
+Create a mount point for our new partition with:
+
+`sudo mkdir /rw`
+
+Check that you can mount the new partition with:
+
+`sudo mount /dev/mmcblk0p3 /rw`
+
+Run `sudo blkid` to get the `PARTUUID` of the new partition.  In my case the output was:
+
+```
+/dev/mmcblk0p1: LABEL="boot" UUID="CDD4-B453" TYPE="vfat" PARTUUID="a2ac960e-01"
+/dev/mmcblk0p2: LABEL="rootfs" UUID="72bfc10d-73ec-4d9e-a54a-1cc507ee7ed2" TYPE="ext4" PARTUUID="a2ac960e-02"
+/dev/mmcblk0p3: UUID="90d9322b-9fd8-41ad-921e-8b124a79ed95" TYPE="ext4" PARTUUID="a2ac960e-03"
+/dev/mmcblk0: PTUUID="a2ac960e" PTTYPE="dos"
+```
+...and hence the `PARTUUID` I needed was `a2ac960e-03`.
+
+Now edit `/etc/fstab` and add the line for the new partition, in my case:
+
+`PARTUUID=a2ac960e-03  /rw             ext4    defaults,noatime    0       0`
+
+...just below the other two "PARTUUID" lines.
+
+Now reboot.  Should the reboot fail, connect a monitor to the Raspberry Pi and determine what it is objecting to.  You should then be able to put the SD card back into your other Linux machine in order to fix the problem.
+
+Having done all that, create a directory under `rw` in which to store the `ioc-client` log files, make the root file system editable temporarily with `sudo mount -o remount,rw /` then edit `/lib/systemd/system/ioc-client.service` to match, edit `/etc/fstab` once more to remove the line which mounted the previous `log_directory_path` in `tmpfs` and, to be tidy, remove the old `log_directory_path` directory and its contents.  Reboot again and `ioc-client` log files should persist in your new directory.
