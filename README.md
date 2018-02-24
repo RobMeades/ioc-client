@@ -353,16 +353,14 @@ Change to the `ioc-client` directory and run:
 
 You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
-If you have the server-side of the IoC set up somewhere according to the instructions at https://github.com/RobMeades/ioc-server, and preferable also got a log server application running on the same remote machine (see instructions at https://github.com/RobMeades/ioc-log) you should now be able to connect to them with:
+If you have the server-side of the IoC set up somewhere according to the instructions at https://github.com/RobMeades/ioc-server and, preferably, also have a log server application running on the same remote machine (see instructions at https://github.com/RobMeades/ioc-log) you should now be able to connect `ioc-client` to them with:
 
 `~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path`
 
 ...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
 
-# Making A Secure Connection
+# Security
 ## Setting Up An SSH Tunnel
-To do this you need to set up an SSH tunnel to the server.
-
 Generate a key pair:
 
 `ssh-keygen -f ~/ioc-client-key -t ecdsa -b 521`
@@ -390,7 +388,7 @@ If you find that an SSH tunnel won't connect or there are other end-to-end conne
 
 ...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side netcat line on another Linux server on the internet, just to be sure that the server is visible.
 
-If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
+If this works from the command line, make sure it also works in the `systemd` unit files by replacing the line that invokes the SSH client with the netcat client-side line.
 
 # Installing A USB Cellular Modem
 First, edit `/boot/config.txt` to append the lines:
@@ -405,7 +403,7 @@ Install `minicom` with:
 
 `sudo apt-get install minicom`
 
-Plug in your USB modem into one of the Raspberry Pi's USB ports.  I used a Hologram USB stick with a u-blox USB modem, which is a pure modem and requires no `usb-modeswitch` messing about.  I created a persistent device name for your USB stick using `udev`. With the USB stick plugged in, enter:
+Plug in your USB modem into one of the Raspberry Pi's USB ports.  I used a Hologram USB stick with a u-blox USB modem, which is a pure modem and requires no `usb-modeswitch` messing about.  I also created a persistent device name for the USB stick using `udev`. With the USB stick plugged in, enter:
 
 `lsusb`
 
@@ -429,7 +427,7 @@ Run `minicom` with:
 
 `minicom -b115200 -D/dev/ttyACM0`
 
-...and check that typing `AT` gets the response `OK`, just to confirm that your modem is talking to the Raspberry Pi.  Exit `minicom` with CTRL-A X
+...and check that typing `AT` gets the response `OK`, just to confirm that the Raspberry Pi can talk to the modem.  Exit `minicom` with `CTRL-A`, `X`.
 
 Now install PPP and a dialler with:
 
@@ -501,14 +499,14 @@ You might have to:
 
 You now have proven cellular connectivity.
 
-# Web Server Setup
+# Web Server Installation
 I set up web server with the thought that I might want to control the Raspberry Pi that way.  Install `nginx` with:
 
 `sudo apt-get install nginx`
 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
-# Incoming Connections Over Cellular
+# Making Incoming TCP Connections Over Cellular
 There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
