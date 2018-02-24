@@ -4,7 +4,18 @@ This Internet of Chuffs client is designed to stream audio from an I2S microphon
 
 # Initial Linux Configuration
 ## Raspbian
-First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` drive called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default user name `pi` and default password `raspberry`).
+First, load Raspbian into your Raspberry Pi.  I used the minimal image, no desktop, and once I'd created the SD card I also created an empty file on the `boot` partition called `SSH` (all in caps, no extension); this switches on SSH so, provided you can determine what IP address the Pi has been allocated, you can do everything else from an SSH terminal (default user name `pi` and default password `raspberry`).
+
+If you are using a Pi Zero W with no Ethernet connector and so need to get at it over Wifi, create a file called `wpa_supplicant.conf` in the `boot` partition of the SD card and in that file put:
+
+```
+network={
+    ssid="SSID"
+    psk="password"
+    key_mgmt=WPA-PSK
+}
+```
+...where `SSID` is replaced by the SSID of your Wifi network and `password` is replaced by the password for your Wifi network.
 
 ## Set Up A User
 Next, set up an admin user as follows:
@@ -483,6 +494,32 @@ You might have to:
 
 You now have proven cellular connectivity.
 
+# Web Server Setup
+I set up web server with the thought that I might want to control the Raspberry Pi that way.  Install `nginx` with:
+
+`sudo apt-get install nginx`
+
+Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
+
+# Control Over Cellular
+There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
+
+The command you want will be of the following form:
+
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
+
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
+
+Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
+
+`curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
+
+You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
+
+`ssh -p xxxx -l username localhost`
+
+...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
+
 # Boot Setup
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
 
@@ -594,7 +631,7 @@ Finally, enable it to start at boot with:
 `sudo systemctl enable ioc-client`
 
 # Remote Access
-I set up the Raspberry Pi to use a DDNS account at www.noip.com so that I can get to it remotely.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
+I set up the Raspberry Pi to use a DDNS account at www.noip.com so that I can get to it remotely (though see "Control Over Cellular" above for the case where this is being done over cellular).  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
 ```
 wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
@@ -641,32 +678,78 @@ Your www.noip.com account should show that the update client has been in contact
 
 ...and by checking once more that your www.noip.com account shows that the update client has been in contact.
 
-# Web Server Setup
-Install `nginx` with:
-
-`sudo apt-get install nginx`
-
-Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
-
-# Control Over Cellular
-Having sorted the DNS situation and installed a web server, it is possible to control things on the Raspberry Pi via HTTP.  However there is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
-
-The command you want will be of the following form:
-
-`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
-
-...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
-
-Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
-
-`curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
-
-You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your username on the Raspberry Pi:
-
-`ssh -p xxxx -l username localhost`
-
-...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
-
 # A Note On the File boot/config.txt
 I have seen my Raspberry Pi reset `boot/config.txt` to be an empty file.  Now that you've got all this working, I recommend that you back it up.
 
+# Preventing Disk Corruption On Removal Of Power Without Shut Down
+If power is removed from the Raspberry Pi before it has shut down there is a chance of SD card corruption.  And shutting the Raspberry Pi down in an organised way is not always possible.  One way to solve this conundrum is to put all the areas of the file system that must be written to into RAM and then make the SD card read-only.  This section describes how to do that based on:
+
+https://narcisocerezo.wordpress.com/2014/06/25/create-a-robust-raspberry-pi-setup-for-24x7-operation/
+http://blog.gegg.us/2014/03/a-raspbian-read-only-root-fs-howto/
+https://www.raspberrypi.org/forums/viewtopic.php?f=28&t=154843
+
+ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) or [dd](http://www.chrysocome.net/dd) before starting this process so that you can go back to that image in case of boot errors.  And of course, with this done, you will not be able to write changes to disk persistently so only do it once you've stopped fiddling with the set up.
+
+Open `/etc/fstab` in your favourite editor.  It will look something like:
+
+```
+proc                  /proc           proc    defaults                                    0       0
+PARTUUID=a2ac960e-01  /boot           vfat    defaults                                    0       2
+PARTUUID=a2ac960e-02  /               ext4    defaults,noatime                            0       1
+# a swapfile is not a swap partition, no line here
+#   use  dphys-swapfile swap[on|off]  for that
+```
+Edit it to change `defaults` to `ro` and change the last number to 0 (to stop file system checks):
+
+```
+proc                  /proc           proc    defaults                                    0       0
+PARTUUID=a2ac960e-01  /boot           vfat    ro                                          0       0
+PARTUUID=a2ac960e-02  /               ext4    ro,noatime                                  0       0
+# a swapfile is not a swap partition, no line here
+#   use  dphys-swapfile swap[on|off]  for that
+```
+...and then append the following:
+
+```
+tmpfs    /tmp               tmpfs    defaults,noatime,mode=1777,size=200m                 0       0
+tmpfs    /var/tmp           tmpfs    defaults,noatime,nosuid,size=200m                    0       0
+tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m           0       0
+tmpfs    /var/lib/sudo      tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
+tmpfs    log_directory_path tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
+```
+...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive.
+
+Remove temporary `fake-hwclock` files by editing `/etc/cron.hourly/fake-hwclock` and putting the following as the first executable line after the initial comments:
+
+```
+# Switched off in order to set SD card to read only
+exit 0
+```
+Move `logrotate` to somewhere writeable by editing `/etc/cron.daily/logrotate` to add `--state /var/log/logrotate.state` to its command-line e.g.:
+
+```
+#!/bin/sh
+
+test -x /usr/sbin/logrotate || exit 0
+/usr/sbin/logrotate --state /var/log/logrotate.state /etc/logrotate.conf
+```
+Disable `man` indexing by editing both `/etc/cron.weekly/man-db` and `/etc/cron.daily/man-db` and putting the following as the first executable line after the initial comments:
+
+```
+# Switched off in order to set SD card to read only
+exit 0
+```
+Finally. stop the swap file from being used at next boot with:
+
+```
+sudo systemctl disable dphys-swapfile
+```
+Now take a deep breath and reboot.  If the system doesn't boot to a terminal log-in prompt, try attaching a screen and watching for what fails during boot, maybe taking a video of the text scrolling up the screen with your mobile phone (as the vital failed thing might scroll off the top).  You might be able to get away with attaching a keyboard to recover but, if not, go back to your backup and try again, remembering that things may have changed in Raspbian over time and so further research may be required to get this right.  Try performing the steps above individually, starting from the last one and working backwards, rebooting after each one to determine what's up.  Try not setting the partitions to `ro` and looking at what is failing to mount at boot with `journal -b`.  If you suspect that you've not captured all the things that need to be moved to `tmpfs`, install the `iostat` utility with `sudo apt-get install sysstat` and then run something like `iostat -m` to find out whether anything has been writing to the SD card (`mmcblk0`); you want the `MB_wrtn` entry to show `0`.  Unfortunately it is not possible to get a per-process view of what wrote to disk as the Raspbian kernel is not built with `auditd` support, so from here on trial/error and Google are your friends.
+
+If you ever need to write to disk, update any packages, etc., remount `root` as writeable with:
+
+`sudo mount -o remount,rw /`
+
+...or remount `boot` as writeable with:
+
+`sudo mount -o remount,rw /boot`
