@@ -687,7 +687,9 @@ Your www.noip.com account should show that the update client has been in contact
 If power is removed from the Raspberry Pi before it has shut down there is a chance of SD card corruption.  And shutting the Raspberry Pi down in an organised way is not always possible.  One way to solve this conundrum is to put all the areas of the file system that must be written to into RAM and then make the SD card read-only.  This section describes how to do that based on this advice:
 
 https://narcisocerezo.wordpress.com/2014/06/25/create-a-robust-raspberry-pi-setup-for-24x7-operation/
+
 http://blog.gegg.us/2014/03/a-raspbian-read-only-root-fs-howto/
+
 https://www.raspberrypi.org/forums/viewtopic.php?f=28&t=154843
 
 ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) or [dd](http://www.chrysocome.net/dd) before starting this process so that you can go back to that image in case of boot errors.  And of course, with this done, you will not normally be able to write changes to disk persistently so only do it once you've stopped fiddling with the set up.
