@@ -338,7 +338,7 @@ This code is linked against the ALSA libraries so you'll need the ALSA developme
 
 `sudo apt-get install libasound2-dev`
 
-## Download and Build ioc-client
+# Download and Build ioc-client
 Install git with:
 
 `sudo apt-get install git`
@@ -355,11 +355,12 @@ You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
 If you have the server-side of the IoC set up somewhere according to the instructions at https://github.com/RobMeades/ioc-server, and preferable also got a log server application running on the same remote machine (see instructions at https://github.com/RobMeades/ioc-log) you should now be able to connect to them with:
 
-`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path"
+`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path`
 
 ...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
 
 # Making A Secure Connection
+## Setting Up An SSH Tunnel
 To do this you need to set up an SSH tunnel to the server.
 
 Generate a key pair:
@@ -378,7 +379,7 @@ Make sure that you can log in to the server from the Raspberry Pi using SSH and 
 
 ...again replacing `user` and `host` with the user name and IP address for the server, and adding `-p xxxx` with the remote port number if it is not port 22.  If you have problems, try adding the `-vvv` switch to `ssh` to find out what it's up to while running `journalctl -f` on the server to determine what it is seeing.
 
-# Debugging SSH Connectivity
+## Debugging SSH Connectivity
 If you find that an SSH tunnel won't connect or there are other end-to-end connectivity issues, try falling back to basic TCP testing with `netcat`.  On the server side run:
 
 `netcat -v -l xxxx`
@@ -391,7 +392,7 @@ If you find that an SSH tunnel won't connect or there are other end-to-end conne
 
 If this works from the command line, make sure it also works in the systemd unit files by replacing the line that invokes the SSH client with the netcat client-side line.
 
-# Using A USB Modem
+# Installing A USB Cellular Modem
 First, edit `/boot/config.txt` to append the lines:
 
 ```
@@ -507,7 +508,7 @@ I set up web server with the thought that I might want to control the Raspberry 
 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
-# Control Over Cellular
+# Incoming Connections Over Cellular
 There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
@@ -526,7 +527,7 @@ You might want to do a similar thing to allow SSH/SFTP access for the Raspberry 
 
 ...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
 
-# Boot Setup
+# Running Everything Automatically
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
 
 ```
