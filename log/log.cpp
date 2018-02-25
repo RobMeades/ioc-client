@@ -230,6 +230,8 @@ static void logFileUploadTask()
                             }
                             LOG(EVENT_LOG_FILE_CLOSE, 0);
                             fclose(pFile);
+                            // Give the server time to write the file
+                            sleep(1);
                         } else {
                             LOG(EVENT_LOG_FILE_OPEN_FAILURE, errno);
                         }
