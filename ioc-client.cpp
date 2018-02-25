@@ -66,13 +66,19 @@ static void printUsage(char * pExeName) {
 }
 
 // Signal handler for CTRL-C
-static void exitHandler(int signal)
+static void exitHandlerSignal(int signal)
+{
+    exitHandler(0);
+}
+
+// Exit handler
+static void exitHandler(int retValue)
 {
     printf("\nStopping.\n");
     stopAudioStreaming();
     printLog();
     deinitLog();
-    exit(0); 
+    exit(retvalue); 
 }
 
 /* ----------------------------------------------------------------
@@ -158,7 +164,7 @@ int main(int argc, char *argv[])
             printf(".\n");
 
             // Set up the CTRL-C handler
-            sigIntHandler.sa_handler = exitHandler;
+            sigIntHandler.sa_handler = exitHandlerSignal;
             sigemptyset(&sigIntHandler.sa_mask);
             sigIntHandler.sa_flags = 0;
             sigaction(SIGINT, &sigIntHandler, NULL);
@@ -185,8 +191,8 @@ int main(int argc, char *argv[])
             } else {
                 printf("Could not start audio streaming, ending.\n");
             }
-            // Call the exit handler directly if we get here
-            exitHandler(0);
+            // Call the exit handler if we get here
+            exitHandler(retValue);
         } else {
             printUsage(pExeName);
         }
