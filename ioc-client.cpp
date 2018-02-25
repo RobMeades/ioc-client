@@ -78,7 +78,7 @@ static void exitHandler(int retValue)
     stopAudioStreaming();
     printLog();
     deinitLog();
-    exit(retvalue); 
+    exit(retValue); 
 }
 
 /* ----------------------------------------------------------------
