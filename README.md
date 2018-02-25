@@ -616,7 +616,8 @@ Description=IoC client
 ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path
 Restart=on-failure
 RestartSec=3
-KillSig=SIGINT
+# Simulate stop with CTRL-C for a tidy shutdown
+KillSignal=SIGINT
 
 [Install]
 WantedBy=multi-user.target
@@ -635,8 +636,8 @@ Finally, enable it to start at boot with:
 
 `sudo systemctl enable ioc-client`
 
-# Remote Access
-I set up the Raspberry Pi to use a DDNS account at www.noip.com so that I can get to it remotely (though see "Control Over Cellular" above for the case where this is being done over cellular).  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
+# DNS
+This is not essential, given the SSH tunnelling above, but I decided to set up the Raspberry Pi to use a DDNS account at www.noip.com so that I know it's IP address.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
 ```
 wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
@@ -652,8 +653,9 @@ Set permissions correctly with:
 ```
 sudo chmod 700 /usr/local/bin/noip2
 sudo chown root:root /usr/local/bin/noip2
-sudo chmod 600 /usr/local/etc/no-ip2.conf
 sudo chown root:root /usr/local/etc/no-ip2.conf
+sudo chmod a+rX /usr/local/etc
+sudo chmod 600 /usr/local/etc/no-ip2.conf
 ```
 Create a file named `noip.service` in the `/etc/systemd/system/` directory with the following contents:
 
@@ -692,9 +694,9 @@ http://blog.gegg.us/2014/03/a-raspbian-read-only-root-fs-howto/
 
 https://www.raspberrypi.org/forums/viewtopic.php?f=28&t=154843
 
-ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) or [dd](http://www.chrysocome.net/dd) before starting this process so that you can go back to that image in case of boot errors.  And of course, with this done, you will not normally be able to write changes to disk persistently so only do it once you've stopped fiddling with the set up.
+ALWAYS make a back-up copy of your SD card with something like [HDD Raw Copy Tool](http://hddguru.com/software/HDD-Raw-Copy-Tool/) before starting this process so that you can go back to that image in case of boot errors; any misspelling or whatever in `/etc/fstab` will prevent the Raspberry Pi booting.  And of course, with this done, you will need to issue a command to make the disk writeable before you can make any changes (but that's pretty easy, see below).
 
-Open `/etc/fstab` in your favourite editor.  It will look something like:
+Open `/etc/fstab` in your favourite editor.  It will look something like this:
 
 ```
 proc                  /proc           proc    defaults                                    0       0
@@ -721,7 +723,7 @@ tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m 
 tmpfs    /var/lib/sudo      tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 tmpfs    log_directory_path tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 ```
-...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see `Saving Logs Safely` below.
+...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see `Saving Logs Persistently With Read Only Root` below.  To check the recursive size of a directory tree in order to verify the sizes in the table above, use `sudo du -sh <root>`, e.g. `sudo du -sh /tmp`.
 
 Remove temporary `fake-hwclock` files by editing `/etc/cron.hourly/fake-hwclock` and putting the following as the first executable line after the initial comments:
 
@@ -748,9 +750,17 @@ Finally. stop the swap file from being used at next boot with:
 ```
 sudo systemctl disable dphys-swapfile
 ```
+Oh, and if you installed `noip` as described in the `DNS` section above, you will need to move its configuration file into the `rw` area as otherwise `noip` will fail to start.  Do this with:
+
+`sudo cp /usr/local/etc/no-ip2.conf /rw/no-ip2.conf`
+
+...then edit the `ExecStart` entry in the file `/etc/systemd/system/noip.service` to become:
+
+`ExecStart=/usr/local/bin/noip2 -c /rw/no-ip2.conf`
+
 Now take a deep breath and reboot.  If the system doesn't boot to a terminal log-in prompt, try attaching a screen and watching for what fails during boot, maybe taking a video of the text scrolling up the screen with your mobile phone (as the vital failed thing might scroll off the top).  You might be able to get away with attaching a keyboard to recover but, if not, go back to your backup and try again, remembering that things may have changed in Raspbian over time and so further research may be required to get this right.  Try performing the steps above individually, starting from the last one and working backwards, rebooting after each one to determine what's up.  Try not setting the partitions to `ro` and looking at what is failing to mount at boot with `journal -b`.  If you suspect that you've not captured all the things that need to be moved to `tmpfs`, install the `iostat` utility with `sudo apt-get install sysstat` and then run something like `iostat -m` to find out whether anything has been writing to the SD card (`mmcblk0`); you want the `MB_wrtn` entry to show `0`.  Unfortunately it is not possible to get a per-process view of what wrote to disk as the Raspbian kernel is not built with `auditd` support, so from here on trial/error and Google are your friends.
 
-If you ever need to write to disk, update any packages, etc., remount `root` as writeable with:
+If you ever need to write to disk, update any packages, etc., you can easily remount `root` as writeable with:
 
 `sudo mount -o remount,rw /`
 
@@ -758,8 +768,8 @@ If you ever need to write to disk, update any packages, etc., remount `root` as 
 
 `sudo mount -o remount,rw /boot`
 
-# Saving Logs Persistently With Read Only Root,
-If you wish to retain robustness of the Linux by following the procedures of the previous section but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  This will require a Linux machine (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  These instructions are based on the those here:
+# Saving Logs Persistently With A Read Only Root
+If you wish to have the robustness of the Linux world by following the procedures of the previous section but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
 
 https://www.howtoforge.com/linux_resizing_ext3_partitions
 
