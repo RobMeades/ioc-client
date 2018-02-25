@@ -482,8 +482,11 @@ static bool startPcm()
 static void stopPcm()
 {
     LOG(EVENT_PCM_STOP, 0);
-    snd_pcm_drain(gpPcmHandle);
-    snd_pcm_close(gpPcmHandle);
+    if (gpPcmHandle != NULL) {
+        snd_pcm_drain(gpPcmHandle);
+        snd_pcm_close(gpPcmHandle);
+        gpPcmHandle = NULL;
+    }
 
 #ifdef AUDIO_TEST_OUTPUT_FILENAME
     if (gpAudioOutputFile != NULL) {
