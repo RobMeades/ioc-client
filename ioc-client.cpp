@@ -65,12 +65,6 @@ static void printUsage(char * pExeName) {
     printf("    %s mic io-server.co.uk:1297 -ls logserver.com -ld /var/log\n\n", pExeName);
 }
 
-// Signal handler for CTRL-C
-static void exitHandlerSignal(int signal)
-{
-    exitHandler(0);
-}
-
 // Exit handler
 static void exitHandler(int retValue)
 {
@@ -79,6 +73,12 @@ static void exitHandler(int retValue)
     printLog();
     deinitLog();
     exit(retValue); 
+}
+
+// Signal handler for CTRL-C
+static void exitHandlerSignal(int signal)
+{
+    exitHandler(0);
 }
 
 /* ----------------------------------------------------------------
