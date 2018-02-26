@@ -380,7 +380,6 @@ static void sendAudioData()
                     durationMs = (unsigned long) timeDifference(&badStart, &end) / 1000;
                     if (durationMs > AUDIO_MAX_DURATION_SOCKET_ERRORS_MS) {
                         LOG(EVENT_SOCKET_ERRORS_FOR_TOO_LONG, durationMs);
-                        gAudioCommsConnected = false;
                     }
                     if ((retValue == ENOTCONN) ||
                         (retValue == ECONNRESET) ||
@@ -606,6 +605,12 @@ void stopAudioStreaming()
     sem_destroy(&gStopSendTask);
 
     printf("Audio streaming stopped.\n");
+}
+
+// Return whether audio is streaming or not.
+bool audioIsStreaming()
+{
+    return gAudioCommsConnected;
 }
 
 // End of file

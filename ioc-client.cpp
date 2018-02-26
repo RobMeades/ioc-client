@@ -184,15 +184,20 @@ int main(int argc, char *argv[])
             LOG(EVENT_BUILD_TIME_UNIX_FORMAT, __COMPILE_TIME_UNIX__);
 
             // Start
-            success = startAudioStreaming(pPcmAudio, pAudioUrl);
-            if (success) {
-                printf("Audio streaming is running, press CTRL-C to stop.\n");
-                pause();
-            } else {
-                printf("Could not start audio streaming, ending.\n");
+            while (1) {
+                // Keep it up until CTRL-C
+                if (!audioIsStreaming()) {
+                    if (startAudioStreaming(pPcmAudio, pAudioUrl)) {
+                        printf("Audio streaming started, press CTRL-C to exit\n");
+                    } else {
+                        // Always clean up, can't be sure at which point the startup
+                        // of streaming failed
+                        stopAudioStreaming();
+                        printf("Failed to start audio streaming, will try again...\n");
+                    }
+                }
+                sleep(1);
             }
-            // Call the exit handler if we get here
-            exitHandler(retValue);
         } else {
             printUsage(pExeName);
         }

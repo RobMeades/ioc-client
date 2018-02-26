@@ -353,14 +353,16 @@ Change to the `ioc-client` directory and run:
 
 You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
-If you have the server-side of the IoC set up somewhere according to the instructions at https://github.com/RobMeades/ioc-server and, preferably, also have a log server application running on the same remote machine (see instructions at https://github.com/RobMeades/ioc-log) you should now be able to connect `ioc-client` to them with:
+If you have the [server-side of the IoC](https://github.com/RobMeades/ioc-server) set up somewhere and, preferably, also have the [log server application](https://github.com/RobMeades/ioc-log) running on the same remote machine, you should now be able to connect `ioc-client` to them with:
 
 `~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path`
 
-...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.
+...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.
 
 # Security
-## Setting Up An SSH Tunnel
+This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#Making-Incoming-TCP-Connections-Over-Cellular) and [Running Everything Automatically](#Running-Everything-Automatically).
+
+## Configuring SSH
 Generate a key pair:
 
 `ssh-keygen -f ~/ioc-client-key -t ecdsa -b 521`
@@ -507,11 +509,11 @@ I set up web server with the thought that I might want to control the Raspberry 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
 # Making Incoming TCP Connections Over Cellular
-There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is, of course, another SSH tunnel but this time the other way around, where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
+There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is to use an SSH tunnel, one where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
 
-`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
 
 ...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
 
@@ -562,7 +564,7 @@ Your modem should connect to the cellular network and, if you run `ifconfig`, yo
 
 `sudo systemctl stop cellular`
 
-Create the file `/lib/systemd/system/urtp-tunnel.service` with contents as follows:
+To secure your outgoing audio path, create the file `/lib/systemd/system/urtp-tunnel.service` with contents as follows:
 
 ```
 [Unit]
@@ -571,7 +573,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@host
+ExecStart=/usr/bin/ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -N -L xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@host
 Restart=on-failure
 RestartSec=3
 
@@ -604,7 +606,7 @@ Reboot without Ethernet/wifi connectivity from the Raspberry Pi and check that t
 
 ...and of course run `sudo systemctl stop cellular` to stop the current instance.  Or just leave the cellular modem disconnected from the Raspberry Pi, to be quite sure.
 
-If you need to open other tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemd unit file for the additional tunnels.
+If you need to open other outgoing tunnelling ports (e.g. to upload log files from the `ioc-client`) then repeat the process of creating a systemd unit file for the additional tunnels.
 
 Once you have everything running sweetly, create another `systemctl` unit file that starts the `ioc-client` at boot by creating a file called something like `/lib/systemd/system/ioc-client.service` with contents something like:
 
@@ -622,7 +624,7 @@ KillSignal=SIGINT
 [Install]
 WantedBy=multi-user.target
 ```
-...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
+...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [IoC logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
 
 Test that it works with:
 
@@ -636,8 +638,42 @@ Finally, enable it to start at boot with:
 
 `sudo systemctl enable ioc-client`
 
-# DNS
-This is not essential, given the SSH tunnelling above, but I decided to set up the Raspberry Pi to use a DDNS account at www.noip.com so that I know it's IP address.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
+# A Word On SSH Tunnels, Cellular Connectivity And Retry Strategies
+By now, following the instructions here and for the [ioc-server](https://github.com/RobMeades/ioc-server) and [IoC logging server](https://github.com/RobMeades/ioc-log), you will have constructed a system that looks something like this:
+
+           +-----------------+                                           +----------------------+                               +-----------------+
+           |   Raspberry Pi  |                                           |      Linux Server    |                               |     Users N     |
+           |                 |                                           | IoC <---------> HTTP |                               |      HTTP       |
+           |   IoC           |                                           |  |  Log           |  |                               |        |        |
+           | SOu SOl SIs SIh |                                           | SIu SIl SOs SOh  SIh |                               |       SOh       |
+           |       SSH       |  +---------+             +--------+       |         SSH          |                               |        |        |
+           |     TCP/IP      |  |  Modem  |             |Cellular|-------|        TCP/IP        | ----------------------------- |      TCP/IP     |
+           |       PPP       |--|   PPP   | \|/     \|/ |        |       |                      |                               +-----------------+
+           |                 |  |   RF    |--+       +--|   RF   |       |                      |
+           +-----------------+  +---------+             +--------+       +----------------------+
+
+...where 'Sxx' represents a socket and:
+
+* 'Sxu' is the socket for the SSH tunnel carrying URTP traffic (i.e. audio),
+* 'Sxl' is the socket for the SSH tunnel for uploading logs from the IoC application to the IoC logging application on the server,
+* 'Sxs' is the socket for SSH control (i.e. port 22) and,
+* 'Sxh' is the socket for the SSH tunnel carrying HTTP traffic.
+
+'x' is either 'O' for outgoing or 'I' for incoming.
+
+The SSH tunnels are there to negotiate the vagaries of cellular networks and to provide authentication/encryption.  PPP simply bridges the connection between the modem and the Raspberry Pi.  The ioc-server application writes audio files to disk in a form that meets the HTTP Live Streaming standard and serves them to multiple users.
+
+In terms of the dynamic behaviour, all of the stuff on the Raspberry Pi (the cellular connection seen as PPP, all of the SSH tunnels and the IoC client application) will start and restart constantly in order to achieve the steady state of a connection over which URTP audio is streamed.  The SSH tunnels can be assumed to be stable once connected.  The weak point is, of course, the cellular connection; this may suffer from short or long periods of inability to transport data.  The PPP connection will stay up across short (10s of seconds) outages, only dropping when the modem considers that there really is no likelihood of traffic getting through any time soon.  And through this malaise the users must get the best possible service.  The strategy to do this is as follows:
+
+1.  The IoC server application will retain a HTTP Live Stream buffer of only the last ~10 seconds of audio.  This prevents stale, non-real-time audio from building up.
+2.  The best outcome from cellular connectivity issues is achieved by allowing the cellular standard to do its stuff until PPP finally drops; the IoC client does this by continuing to send, irrespective of success, including re-starting the TCP connection if it drops.
+3.  The SSH tunnels include a keep-alive that is sufficiently regular to keep open the cellular network firewalls etc. but, given (2), don't otherwise pro-actively perform checking of the link.
+
+At least, that's the strategy.
+
+# Further Optimisations
+## DNS
+This is not essential, given the SSH tunnelling above, but I decided to set up the Raspberry Pi to use a DDNS account at www.noip.com so that I know its IP address.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
 ```
 wget https://www.noip.com/client/linux/noip-duc-linux.tar.gz
@@ -685,7 +721,7 @@ Your www.noip.com account should show that the update client has been in contact
 
 ...and by checking once more that your www.noip.com account shows that the update client has been in contact.
 
-# Preventing Disk Corruption On Removal Of Power Without Shut Down
+## Preventing Disk Corruption On Removal Of Power Without Shut Down
 If power is removed from the Raspberry Pi before it has shut down there is a chance of SD card corruption.  And shutting the Raspberry Pi down in an organised way is not always possible.  One way to solve this conundrum is to put all the areas of the file system that must be written to into RAM and then make the SD card read-only.  This section describes how to do that based on this advice:
 
 https://narcisocerezo.wordpress.com/2014/06/25/create-a-robust-raspberry-pi-setup-for-24x7-operation/
@@ -723,7 +759,7 @@ tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m 
 tmpfs    /var/lib/sudo      tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 tmpfs    log_directory_path tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 ```
-...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see `Saving Logs Persistently With Read Only Root` below.  To check the recursive size of a directory tree in order to verify the sizes in the table above, use `sudo du -sh <root>`, e.g. `sudo du -sh /tmp`.
+...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see [below](#Saving-Logs-Persistently-With-A-Read-Only-Root).  To check the recursive size of a directory tree in order to verify the sizes in the table above, use `sudo du -sh <root>`, e.g. `sudo du -sh /tmp`.
 
 Remove temporary `fake-hwclock` files by editing `/etc/cron.hourly/fake-hwclock` and putting the following as the first executable line after the initial comments:
 
@@ -750,13 +786,21 @@ Finally. stop the swap file from being used at next boot with:
 ```
 sudo systemctl disable dphys-swapfile
 ```
-Oh, and if you installed `noip` as described in the `DNS` section above, you will need to move its configuration file into the `rw` area as otherwise `noip` will fail to start.  Do this with:
+If you installed `noip` as described in the [DNS](#DNS) section above it will no longer work as it requires its configuration file to be writeable. If you really need it you should follow the instructions [below](#Saving-Logs-Persistently-With-A-Read-Only-Root) to create an `rw` area and then move the configuration file with:
 
 `sudo cp /usr/local/etc/no-ip2.conf /rw/no-ip2.conf`
 
 ...then edit the `ExecStart` entry in the file `/etc/systemd/system/noip.service` to become:
 
 `ExecStart=/usr/local/bin/noip2 -c /rw/no-ip2.conf`
+
+`nginx` suffers from the same problem so, if you installed it as described [above](#Web-Server-Installation) then, once you have followed the instructions [below](#Saving-Logs-Persistently-With-A-Read-Only-Root) to create an `rw` area, move it there with:
+
+`sudo cp /etc/nginx/nginx.conf /rw/nginx.conf`
+
+...then edit the `ExecStartPre`, `ExecStart` and `ExecReload` entries in the file `/lib/systemd/system/nginx.service` to add the parameter `-c /rw/nginx.conf`.  `nginx` also seems to have trouble creating its own logging directory `/var/log/nginx` when it doesn't already exist in `tmpfs` so I added another `tmpfs` line to `etc/fstab` to make it happy:
+
+`tmpfs    /var/log/nginx     tmpfs    defaults,noatime,nosuid,mode=0755,size=10m           0       0`
 
 Now take a deep breath and reboot.  If the system doesn't boot to a terminal log-in prompt, try attaching a screen and watching for what fails during boot, maybe taking a video of the text scrolling up the screen with your mobile phone (as the vital failed thing might scroll off the top).  You might be able to get away with attaching a keyboard to recover but, if not, go back to your backup and try again, remembering that things may have changed in Raspbian over time and so further research may be required to get this right.  Try performing the steps above individually, starting from the last one and working backwards, rebooting after each one to determine what's up.  Try not setting the partitions to `ro` and looking at what is failing to mount at boot with `journal -b`.  If you suspect that you've not captured all the things that need to be moved to `tmpfs`, install the `iostat` utility with `sudo apt-get install sysstat` and then run something like `iostat -m` to find out whether anything has been writing to the SD card (`mmcblk0`); you want the `MB_wrtn` entry to show `0`.  Unfortunately it is not possible to get a per-process view of what wrote to disk as the Raspbian kernel is not built with `auditd` support, so from here on trial/error and Google are your friends.
 
@@ -768,8 +812,8 @@ If you ever need to write to disk, update any packages, etc., you can easily rem
 
 `sudo mount -o remount,rw /boot`
 
-# Saving Logs Persistently With A Read Only Root
-If you wish to have the robustness of the Linux world by following the procedures of the previous section but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
+## Saving Logs Persistently With A Read Only Root
+If you wish to have the robustness of the Linux world as specified [above](#Preventing-Disk-Corruption-On-Removal-Of-Power-Without-Shut-Down) but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
 
 https://www.howtoforge.com/linux_resizing_ext3_partitions
 

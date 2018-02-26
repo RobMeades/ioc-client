@@ -34,6 +34,11 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
  */
 void stopAudioStreaming();
 
+/** Return whether audio is streaming or not.
+ * @return true if audio is streaming, else false.
+ */
+bool audioIsStreaming();
+
 #endif // _AUDIO_
 
 // End of file
