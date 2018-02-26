@@ -360,7 +360,7 @@ If you have the [server-side of the IoC](https://github.com/RobMeades/ioc-server
 ...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.
 
 # Security
-This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#Making-Incoming-TCP-Connections-Over-Cellular) and [Running Everything Automatically](#Running-Everything-Automatically).
+This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#making-incoming-tcp-connections-over-cellular) and [Running Everything Automatically](#running-everything-automatically).
 
 ## Configuring SSH
 Generate a key pair:
@@ -759,7 +759,7 @@ tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m 
 tmpfs    /var/lib/sudo      tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 tmpfs    log_directory_path tmpfs    defaults,noatime,nosuid,mode=0755,size=2m            0       0
 ```
-...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see [below](#Saving-Logs-Persistently-With-A-Read-Only-Root).  To check the recursive size of a directory tree in order to verify the sizes in the table above, use `sudo du -sh <root>`, e.g. `sudo du -sh /tmp`.
+...where `log_directory_path` is replaced by the path to the `ioc-client` logging directory as specified above.  Alternatively, if you care about those logs you could create a separate partition for them or log them to an external USB drive, see [below](#saving-logs-persistently-with-a-read-only-root).  To check the recursive size of a directory tree in order to verify the sizes in the table above, use `sudo du -sh <root>`, e.g. `sudo du -sh /tmp`.
 
 Remove temporary `fake-hwclock` files by editing `/etc/cron.hourly/fake-hwclock` and putting the following as the first executable line after the initial comments:
 
@@ -786,7 +786,7 @@ Finally. stop the swap file from being used at next boot with:
 ```
 sudo systemctl disable dphys-swapfile
 ```
-If you installed `noip` as described in the [DNS](#DNS) section above it will no longer work as it requires its configuration file to be writeable. If you really need it you should follow the instructions [below](#Saving-Logs-Persistently-With-A-Read-Only-Root) to create an `rw` area and then move the configuration file with:
+If you installed `noip` as described in the [DNS](#dns) section above it will no longer work as it requires its configuration file to be writeable. If you really need it you should follow the instructions [below](#saving-logs-persistently-with-a-read-only-root) to create an `rw` area and then move the configuration file with:
 
 `sudo cp /usr/local/etc/no-ip2.conf /rw/no-ip2.conf`
 
@@ -794,7 +794,7 @@ If you installed `noip` as described in the [DNS](#DNS) section above it will no
 
 `ExecStart=/usr/local/bin/noip2 -c /rw/no-ip2.conf`
 
-`nginx` suffers from the same problem so, if you installed it as described [above](#Web-Server-Installation) then, once you have followed the instructions [below](#Saving-Logs-Persistently-With-A-Read-Only-Root) to create an `rw` area, move it there with:
+`nginx` suffers from the same problem so, if you installed it as described [above](#web-server-installation) then, once you have followed the instructions [below](#saving-logs-persistently-with-a-read-only-root) to create an `rw` area, move it there with:
 
 `sudo cp /etc/nginx/nginx.conf /rw/nginx.conf`
 
@@ -813,7 +813,7 @@ If you ever need to write to disk, update any packages, etc., you can easily rem
 `sudo mount -o remount,rw /boot`
 
 ## Saving Logs Persistently With A Read Only Root
-If you wish to have the robustness of the Linux world as specified [above](#Preventing-Disk-Corruption-On-Removal-Of-Power-Without-Shut-Down) but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
+If you wish to have the robustness of the Linux world as specified [above](#preventing-disk-corruption-on-removal-of-power-without-shut-down) but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
 
 https://www.howtoforge.com/linux_resizing_ext3_partitions
 
