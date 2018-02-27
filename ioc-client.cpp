@@ -90,6 +90,7 @@ int main(int argc, char *argv[])
 {
     int retValue = -1;
     bool success = false;
+    bool logFileUploadSuccess = false;
     int x = 0;
     char *pExeName = NULL;
     char *pPcmAudio = NULL;
@@ -176,9 +177,6 @@ int main(int argc, char *argv[])
             initLog(gLogBuffer);
             initLogFile(pLogFilePath);
             gLogWriteTicker = startTimer(1000000L, TIMER_PERIODIC, writeLogCallback, NULL);
-            if (pLogUrl != NULL) {
-                beginLogFileUpload(pLogUrl);
-            }
 
             LOG(EVENT_SYSTEM_START, getUSeconds() / 1000000);
             LOG(EVENT_BUILD_TIME_UNIX_FORMAT, __COMPILE_TIME_UNIX__);
@@ -189,6 +187,11 @@ int main(int argc, char *argv[])
                 if (!audioIsStreaming()) {
                     if (startAudioStreaming(pPcmAudio, pAudioUrl)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
+                        // Safe to upload log files now we've succeeded in making
+                        // one connection
+                        if(!logFileUploadSuccess && (pLogUrl != NULL)) {
+                            logFileUploadSuccess = beginLogFileUpload(pLogUrl);
+                        }
                     } else {
                         // Always clean up, can't be sure at which point the startup
                         // of streaming failed
