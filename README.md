@@ -794,11 +794,11 @@ If you installed `noip` as described in the [DNS](#dns) section above it will no
 
 `ExecStart=/usr/local/bin/noip2 -c /rw/no-ip2.conf`
 
-`nginx` suffers from the same problem so, if you installed it as described [above](#web-server-installation) then, once you have followed the instructions [below](#saving-logs-persistently-with-a-read-only-root) to create an `rw` area, move it there with:
+`nginx` suffers from the same problem so, if you installed it as described [above](#web-server-installation) then, once you have followed the instructions [below](#saving-logs-persistently-with-a-read-only-root) to create an `rw` area, move its configuration file there with:
 
 `sudo cp /etc/nginx/nginx.conf /rw/nginx.conf`
 
-...then edit the `ExecStartPre`, `ExecStart` and `ExecReload` entries in the file `/lib/systemd/system/nginx.service` to add the parameter `-c /rw/nginx.conf`.  `nginx` also seems to have trouble creating its own logging directory `/var/log/nginx` when it doesn't already exist in `tmpfs` so I added another `tmpfs` line to `etc/fstab` to make it happy:
+...then edit the `ExecStartPre`, `ExecStart` and `ExecReload` entries in the file `/lib/systemd/system/nginx.service` to add the parameter `-c /rw/nginx.conf`.  `nginx` also seems to have trouble creating its own logging directory, `/var/log/nginx`, when the directory doesn't already exist in `tmpfs`, so I added another `tmpfs` line to `/etc/fstab` to make it happy:
 
 `tmpfs    /var/log/nginx     tmpfs    defaults,noatime,nosuid,mode=0755,size=10m           0       0`
 
