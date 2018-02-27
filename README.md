@@ -513,7 +513,7 @@ There is a remaining issue in that cellular networks won't generally accept inco
 
 The command you want will be of the following form:
 
-`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -o -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
 
 ...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
 
