@@ -9,6 +9,9 @@ First, load Raspbian into your Raspberry Pi.  I used the minimal image, no deskt
 If you are using a Pi Zero W with no Ethernet connector and so need to get at it over Wifi, create a file called `wpa_supplicant.conf` in the `boot` partition of the SD card and in that file put:
 
 ```
+country=GB
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
 network={
     ssid="SSID"
     psk="password"
@@ -16,6 +19,17 @@ network={
 }
 ```
 ...where `SSID` is replaced by the SSID of your Wifi network and `password` is replaced by the password for your Wifi network.
+
+If, at some later point, you want to disable BT and Wifi (so that the system uses cellular as you will intend), add the following to `/boot/config.txt`:
+
+```
+# Disable BT and Wifi
+dtoverlay=pi3-disable-bt
+dtoverlay=pi3-disable-wifi
+```
+...and also enter:
+
+`sudo systemctl disable hciuart`
 
 ## Set Up A User
 Next, set up an admin user as follows:
@@ -67,7 +81,7 @@ Install a few required utilities:
 sudo apt-get install bc
 sudo apt-get install libncurses5-dev
 ```
-Download the correct source version for your kernel and clean it up using the `rpi-source` utility as follows:
+Download the correct source version for your kernel/ARM architecture and clean it up using the `rpi-source` utility as follows:
 
 ```
 sudo wget https://raw.githubusercontent.com/notro/rpi-source/master/rpi-source -O /usr/bin/rpi-source
@@ -79,15 +93,13 @@ If you receive an error like this:
 
 `gcc version check: mismatch between gcc (6) and /proc/version (4.9.3)`
 
-...where the GCC version is higher than the `/proc/version` version, then that's OK, just run `rpi-source` again with the parameter `--skip-gcc`.  `rpi-source` may ask you to install other things along the way; do what it says.  When it has completed, amongst other things, you should now have the following file:
+...where the GCC version is higher than the `/proc/version` version, then that's OK, just run `rpi-source` again with the parameter `--skip-gcc`.  `rpi-source` may ask you to install other things along the way; do what it says.  When it has completed you should have the following file (with many others):
 
-`~/linux/sound/soc/codecs/ics43432.c`
+`~/linux-xxxx.../sound/soc/codecs/ics43432.c`
 
-Change to the Linux directory:
+...where `xxxx...` is a long hex string specific to your kernel version.
 
-`cd linux`
-
-Make a backup of your current `.config` file with:
+CD to the `~/linux-xxxx...` directory.  Make a backup of your current `.config` file with:
 
 `cp .config back.config`
 
@@ -99,13 +111,13 @@ Use the arrow keys to navigate down the menu tree as follows:
 
 `Device drivers ---> Sound card support ---> Advance Linux Sound Architecture ---> ALSA for SoC audio support ---> CODEC drivers ---> InvenSense ICS43432 I2S microphone codec`
 
-...and press the space bar to put an `m` against that entry.  Exit by pressing ESC lots of times, saving the `.config` file when prompted.
+...and press the space bar to put an `m` against that entry.  Exit by pressing ESC lots of times, saving the file as `.config` when prompted.
 
 Now include this change and build the codecs module with:
 
 ```
-make prepare
-make M=sound/soc/codecs
+sudo make prepare
+sudo make M=sound/soc/codecs
 ```
 Look in the `sound/soc/codecs` directory again and you should now see the file `snd-soc-ics43432.ko`.
 
@@ -113,13 +125,30 @@ Try adding the module manually with:
 
 `sudo insmod sound/soc/codecs/snd-soc-ics43432.ko`
 
-If this fails with the error `Could not insert module, invalid module format` then you've got the wrong version of Linux kernel source for the Linux binary you are using and you need to repeat this section.
+If this fails with the error `Could not insert module, invalid module format` then you've got the wrong version of Linux kernel source for the Linux binary you are using and you need to repeat this section.  The version of the Linux kernel that you downloaded can be found by looking at the top of the `Makefile` in the top level directory of your unpacked download tree, where you will find something like:
+
+```
+VERSION = 4
+PATCHLEVEL = 9
+SUBLEVEL = 59
+EXTRAVERSION =
+NAME = Roaring Lionus
+```
+Note that this does NOT include the ARM architecture version, which is computed later by the `rpi-source` utility itself.  The Linux version you are running can be found with `uname -r`.
+
+To find the Linux kernel version your module thinks it was compiled with, use:
+
+`sudo modinfo sound/soc/codecs/snd-soc-ics43432.ko`
+
+It is worth noting that different Raspberry Pi boards can have processors with different ARM architectures and hence hand-built modules are not necessarily fully compatible (e.g. this was true of my Raspberry Pi B+ (v7 ARM architecture) and my Pi Zero W (v6 ARM architecture)); the module version will be that of the ARM architecture of the processor it was built on.  To check your CPU version use:
+
+`cat /proc/cpuinfo`
 
 NOTE: when you do `sudo apt-get upgrade` this might happen again if the Linux version changes as a result.  You can check the Linux version using `uname -r`; if the version has changed you need to re-download the Linux source with `rpi-source` and repeat the actions of this section to build a compatible `snd-soc-ics43432.ko` file.
 
 Install the module with:
 
-``sudo cp sound/soc/codecs/snd-soc-ics43432.ko /lib/modules/`uname -r`/``
+`sudo cp sound/soc/codecs/snd-soc-ics43432.ko /lib/modules/`uname -r`/`
 
 Run `sudo depmod` so as to let Linux work out the dependencies.
 
