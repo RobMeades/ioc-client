@@ -134,7 +134,7 @@ SUBLEVEL = 59
 EXTRAVERSION =
 NAME = Roaring Lionus
 ```
-Note that this does NOT include the ARM architecture version, which is computed later by the `rpi-source` utility itself.  The Linux version you are running can be found with `uname -r`.
+Note that this does NOT include the ARM architecture version, which is set up by the `rpi-source` utility itself.  The Linux version you are running can be found with `uname -r`.
 
 To find the Linux kernel version your module thinks it was compiled with, use:
 
@@ -538,19 +538,19 @@ I set up web server with the thought that I might want to control the Raspberry 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
 # Making Incoming TCP Connections Over Cellular
-There is a remaining issue in that cellular networks won't generally accept incoming TCP connections.  The trick to fix this is to use an SSH tunnel, one where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
+There is a remaining issue in that cellular networks won't generally accept incoming TCP connections (e.g. for HTTP or for an incoming SSH terminal connection).  The trick to fix this is to use another SSH tunnel, one where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
 
-`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ServerAliveInterval 30" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ExitOnForwardFailure yes" -o "ServerAliveInterval 30" -o "ClientAliveInterval 30" -o "ClientAliveCountMax 2" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
 
-...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  You probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  `ExitOnForwardFailure yes` is added as, if the ssh client tries to re-establish the connection before the server has realised it has gone and released the port, the tunnel can be set-up but not bound to a port at the server end, in a sort of zombie state.  You ALSO need to make sure that, on the server side, you set `ClientAliveInterval` and `ClientAliveCountMax` so that, should the connection drop, the server will release the port and it can be re-established (see [ioc-server](https://github.com/RobMeades/ioc-server)).
 
-Once you've got the tunnel working, create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
+If this is for the HTTP connection you probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).  Once you've got the tunnel working, for incoming HTTP connections create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
 
 `curl -i -H "Accept: application/json" -H "Content-Type: application/json" http://localhost:xxxx`.
 
-You might want to do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your user name on the Raspberry Pi:
+You should do a similar thing to allow SSH/SFTP access for the Raspberry Pi for more direct control.  Remember, when you `ssh` in from the remote machine, to specify the correct port number and your user name on the Raspberry Pi:
 
 `ssh -p xxxx -l username localhost`
 
