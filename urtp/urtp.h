@@ -181,7 +181,7 @@ public:
      * 20 ms a value of 100 represents around 2 seconds.
      */
 #   ifndef MAX_NUM_DATAGRAMS
-#    define MAX_NUM_DATAGRAMS 500
+#    define MAX_NUM_DATAGRAMS 250
 #   endif
 
     /** The desired number of unused bits to keep in the audio processing
