@@ -21,16 +21,20 @@
  * -------------------------------------------------------------- */
 
 /** Start audio streaming.
- * @param pAlsaPcmDeviceName the name of the ALSA PCM device to stream
- *                           from (must be 32 bits per channel, stereo,
- *                           16 kHz sample rate).
- * @param pAudioServerUrl    the URL of the server to stream at.
- * @param pWatchdogHandler   pointer to the watchdog handler, NULL if none is active.
- * @return                   true if succesful, else false.
+ * @param pAlsaPcmDeviceName   the name of the ALSA PCM device to stream
+ *                             from (must be 32 bits per channel, stereo,
+ *                             16 kHz sample rate).
+ * @param pAudioServerUrl      the URL of the server to stream at.
+ * @param pWatchdogHandler     pointer to the watchdog handler, NULL if none is active.
+ * @param pNowStreamingHandler pointer to a "I'm streaming" handler which should be called
+ *                             frequently (e.g. every transmit) to show activity; may be
+ *                             NULL.
+ * @return                     true if succesful, else false.
  */
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
                          const char *pAudioServerUrl,
-                         void(*pWatchdogHandler)(void));
+                         void(*pWatchdogHandler)(void),
+                         void(*pNowStreamingHandler)(void));
 
 /** Shut down audio streaming.
  */

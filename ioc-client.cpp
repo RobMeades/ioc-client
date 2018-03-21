@@ -22,6 +22,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <systemd/sd-daemon.h> // For systemd watchdog
+#include <wiringPi.h>
 #include <compile_time.h>
 #include <utils.h>
 #include <timer.h>
@@ -38,6 +39,9 @@
 
 // The default location for log files
 #define DEFAULT_LOG_FILE_PATH "./logtmp"
+
+// GPIO pin to use for "I'm streaming" indication
+#define NOW_STREAMING_PIN 0 // GPIO0, header pin 11, parallel with I2S clock
 
 /* ----------------------------------------------------------------
  * STATIC VARIABLES
@@ -67,6 +71,7 @@ static void printUsage(char * pExeName) {
     printf("    -ld optionally specifies the directory to use for log files (default %s); the directory will be created if it does not exist,\n", DEFAULT_LOG_FILE_PATH);
     printf("For example:\n");
     printf("    %s mic io-server.co.uk:1297 -ls logserver.com -ld /var/log\n\n", pExeName);
+    printf("Note: when the client is connected and successfully transmitting audio to the server GPIO%d will toggle.", NOW_STREAMING_PIN);
 }
 
 // Exit handler
@@ -74,6 +79,7 @@ static void exitHandler(int retValue)
 {
     printf("\nStopping.\n");
     stopAudioStreaming();
+    digitalWrite(NOW_STREAMING_PIN, LOW);
     printLog();
     deinitLog();
     exit(retValue); 
@@ -92,6 +98,18 @@ static void watchdogHandler()
         /* Ping systemd */
         sd_notify(0, "WATCHDOG=1");
     }
+}
+
+// Now streaming handler
+static void nowStreamingHandler()
+{
+    int x = 0;
+    
+    // Toggle the "I'm streaming" LED
+    if (digitalRead(NOW_STREAMING_PIN) == 0) {
+        x = 1;
+    }
+    digitalWrite(NOW_STREAMING_PIN, x);
 }
 
 /* ----------------------------------------------------------------
@@ -200,11 +218,15 @@ int main(int argc, char *argv[])
                 gWatchdogIntervalSeconds = 0;
             }
 
+            // Set up wiringPi and the "I'm streaming" pin
+            wiringPiSetup();
+            pinMode(NOW_STREAMING_PIN, OUTPUT);
+
             // Start
             while (1) {
                 // Keep it up until CTRL-C
                 if (!audioIsStreaming()) {
-                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler)) {
+                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler, nowStreamingHandler)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
                         // Safe to upload log files now we've succeeded in making
                         // one connection

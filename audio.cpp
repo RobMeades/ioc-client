@@ -131,6 +131,9 @@ static volatile bool gAudioCommsConnected = false;
 // Pointer to watchdog handler.
 static void(*gpWatchdogHandler)(void) = NULL;
 
+// Pointer to "I'm streaming" handler.
+static void(*gpNowStreamingHandler)(void) = NULL;
+
 // Keep track of stats.
 static unsigned long gNumAudioSendFailures = 0;
 static unsigned long gNumAudioBytesSent = 0;
@@ -371,6 +374,9 @@ static void sendAudioData()
                     LOG(EVENT_SEND_FAILURE, retValue);
                     gNumAudioSendFailures++;
                 } else {
+                    if (gpNowStreamingHandler != NULL) {
+                        gpNowStreamingHandler();
+                    }
                     gNumAudioBytesSent += retValue;
                     okToDelete = true;
                 }
@@ -511,11 +517,13 @@ static void stopPcm()
 // Note: here be multiple return statements.
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
                          const char *pAudioServerUrl,
-                         void(*pWatchdogHandler)(void))
+                         void(*pWatchdogHandler)(void),
+                         void(*pNowStreamingHandler)(void))
 {
     gpAlsaPcmDeviceName = pAlsaPcmDeviceName;
     gpAudioServerUrl = pAudioServerUrl;
     gpWatchdogHandler = pWatchdogHandler;
+    gpNowStreamingHandler = pNowStreamingHandler;
 
     // Start the per-second monitor tick and reset the diagnostics
     LOG(EVENT_AUDIO_STREAMING_START, 0);
@@ -589,6 +597,7 @@ void stopAudioStreaming()
     gpAlsaPcmDeviceName = NULL;
     gpAudioServerUrl = NULL;
     gpWatchdogHandler = NULL;
+    gpNowStreamingHandler = NULL;
 
     if (gpEncodeTask != NULL) {
         printf("Stopping audio encode task...\n");

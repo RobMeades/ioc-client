@@ -376,6 +376,13 @@ Install the `systemd` development world (required to implement a `systemd` watch
 
 `sudo apt-get install libsystemd-dev`
 
+Install wiringPi with:
+
+```
+git clone git://git.drogon.net/wiringPi
+cd wiringPi
+./build
+```
 Clone this repo with:
 
 `git clone https://github.com/RobMeades/ioc-client`
@@ -390,7 +397,7 @@ If you have the [server-side of the IoC](https://github.com/RobMeades/ioc-server
 
 `~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path`
 
-...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.
+...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.  When a connection is active GPIO0 will toggle on every transmit; it's probably useful to connect an LED (via a 1k resistor) between that pin and ground.
 
 # Security
 This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#making-incoming-tcp-connections-over-cellular) and [Running Everything Automatically](#running-everything-automatically).
@@ -836,6 +843,12 @@ If you installed `noip` as described in the [DNS](#dns) section above it will no
 
 `tmpfs    /var/log/nginx     tmpfs    defaults,noatime,nosuid,mode=0755,size=10m           0       0`
 
+Note that the DNS servers, stored in `/etc/resolv.conf`, may well be different for your cellular connection and your Ethernet connection.  You want to make sure that the disk is writeable when you are connected via cellular only, then the correct DNS servers for the cellular network will be stored in the read-only file, otherwise DNS look-up could fail when you are on cellular only.  That said, DNS look-up could then fail if you only have Ethernet connected (if the cellular network has its own DNS servers which are only accessible from inside the network), so it is best to move the `resolv.conf` file to an 'rw' area as follows:
+
+```
+sudo mv /etc/resolv.conf /rw/resolv.conf
+sudo ln -s /rw/resolv.conf /etc/resolv.conf
+```
 Now take a deep breath and reboot.  If the system doesn't boot to a terminal log-in prompt, try attaching a screen and watching for what fails during boot, maybe taking a video of the text scrolling up the screen with your mobile phone (as the vital failed thing might scroll off the top).  You might be able to get away with attaching a keyboard to recover but, if not, go back to your backup and try again, remembering that things may have changed in Raspbian over time and so further research may be required to get this right.  Try performing the steps above individually, starting from the last one and working backwards, rebooting after each one to determine what's up.  Try not setting the partitions to `ro` and looking at what is failing to mount at boot with `journal -b`.  If you suspect that you've not captured all the things that need to be moved to `tmpfs`, install the `iostat` utility with `sudo apt-get install sysstat` and then run something like `iostat -m` to find out whether anything has been writing to the SD card (`mmcblk0`); you want the `MB_wrtn` entry to show `0`.  Unfortunately it is not possible to get a per-process view of what wrote to disk as the Raspbian kernel is not built with `auditd` support, so from here on trial/error and Google are your friends.
 
 If you ever need to write to disk, update any packages, etc., you can easily remount `root` as writeable with:
