@@ -128,6 +128,9 @@ static int gSocket = -1;
 // Flag to indicate that the audio comms channel is up.
 static volatile bool gAudioCommsConnected = false;
 
+// Pointer to watchdog handler.
+static void(*gpWatchdogHandler)(void) = NULL;
+
 // Keep track of stats.
 static unsigned long gNumAudioSendFailures = 0;
 static unsigned long gNumAudioBytesSent = 0;
@@ -408,6 +411,11 @@ static void sendAudioData()
             if (okToDelete) {
                 gUrtp.setUrtpDatagramAsRead(pUrtpDatagram);
             }
+
+            // Make sure the watchdog is fed
+            if (gpWatchdogHandler != NULL) {
+                gpWatchdogHandler();
+            }
         }
     }
 }
@@ -502,10 +510,12 @@ static void stopPcm()
 // Start audio streaming.
 // Note: here be multiple return statements.
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
-                         const char *pAudioServerUrl)
+                         const char *pAudioServerUrl,
+                         void(*pWatchdogHandler)(void))
 {
     gpAlsaPcmDeviceName = pAlsaPcmDeviceName;
     gpAudioServerUrl = pAudioServerUrl;
+    gpWatchdogHandler = pWatchdogHandler;
 
     // Start the per-second monitor tick and reset the diagnostics
     LOG(EVENT_AUDIO_STREAMING_START, 0);
@@ -578,6 +588,7 @@ void stopAudioStreaming()
     
     gpAlsaPcmDeviceName = NULL;
     gpAudioServerUrl = NULL;
+    gpWatchdogHandler = NULL;
 
     if (gpEncodeTask != NULL) {
         printf("Stopping audio encode task...\n");

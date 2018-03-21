@@ -372,6 +372,10 @@ Install git with:
 
 `sudo apt-get install git`
 
+Install the `systemd` development world (required to implement a `systemd` watchdog) with:
+
+`sudo apt-get install libsystemd-dev`
+
 Clone this repo with:
 
 `git clone https://github.com/RobMeades/ioc-client`
@@ -645,6 +649,7 @@ Description=IoC client
 
 [Service]
 ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path
+WatchdogSec=10s
 Restart=on-failure
 RestartSec=3
 # Simulate stop with CTRL-C for a tidy shutdown

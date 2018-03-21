@@ -13,9 +13,9 @@ OBJCOPY := objcopy
 
 #Additional flags
 PREPROCESSOR_MACROS := DEBUG=1 ENABLE_RAMLOG
-INCLUDE_DIRS := . log timer urtp utils
+INCLUDE_DIRS := . log timer urtp utils /usr/include
 LIBRARY_DIRS := 
-LIBRARY_NAMES := pthread asound
+LIBRARY_NAMES := pthread asound systemd
 ADDITIONAL_LINKER_INPUTS := 
 MACOS_FRAMEWORKS := 
 LINUX_PACKAGES := 

@@ -25,10 +25,12 @@
  *                           from (must be 32 bits per channel, stereo,
  *                           16 kHz sample rate).
  * @param pAudioServerUrl    the URL of the server to stream at.
+ * @param pWatchdogHandler   pointer to the watchdog handler, NULL if none is active.
  * @return                   true if succesful, else false.
  */
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
-                         const char *pAudioServerUrl);
+                         const char *pAudioServerUrl,
+                         void(*pWatchdogHandler)(void));
 
 /** Shut down audio streaming.
  */

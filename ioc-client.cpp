@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <unistd.h>
+#include <systemd/sd-daemon.h> // For systemd watchdog
 #include <compile_time.h>
 #include <utils.h>
 #include <timer.h>
@@ -39,7 +40,7 @@
 #define DEFAULT_LOG_FILE_PATH "./logtmp"
 
 /* ----------------------------------------------------------------
- * VARIABLES
+ * STATIC VARIABLES
  * -------------------------------------------------------------- */
 
 // For logging.
@@ -47,6 +48,9 @@ static char gLogBuffer[LOG_STORE_SIZE];
 
 // For writing a log to file in the background.
 static size_t gLogWriteTicker;
+
+// Watchdog timer interval.
+static long long unsigned int gWatchdogIntervalSeconds;
 
 /* ----------------------------------------------------------------
  * STATIC FUNCTIONS
@@ -79,6 +83,15 @@ static void exitHandler(int retValue)
 static void exitHandlerSignal(int signal)
 {
     exitHandler(0);
+}
+
+// Watchdog handler
+static void watchdogHandler()
+{
+    if (gWatchdogIntervalSeconds > 0) {
+        /* Ping systemd */
+        sd_notify(0, "WATCHDOG=1");
+    }
 }
 
 /* ----------------------------------------------------------------
@@ -181,15 +194,21 @@ int main(int argc, char *argv[])
             LOG(EVENT_SYSTEM_START, getUSeconds() / 1000000);
             LOG(EVENT_BUILD_TIME_UNIX_FORMAT, __COMPILE_TIME_UNIX__);
 
+            // Tell systemd we're awake and determine if the systemd watchdog is on
+            sd_notify(0, "READY=1");
+            if (sd_watchdog_enabled(0, &gWatchdogIntervalSeconds) <= 0) {
+                gWatchdogIntervalSeconds = 0;
+            }
+
             // Start
             while (1) {
                 // Keep it up until CTRL-C
                 if (!audioIsStreaming()) {
-                    if (startAudioStreaming(pPcmAudio, pAudioUrl)) {
+                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
                         // Safe to upload log files now we've succeeded in making
                         // one connection
-                        if(!logFileUploadSuccess && (pLogUrl != NULL)) {
+                        if (!logFileUploadSuccess && (pLogUrl != NULL)) {
                             logFileUploadSuccess = beginLogFileUpload(pLogUrl);
                         }
                     } else {
@@ -199,6 +218,13 @@ int main(int argc, char *argv[])
                         printf("Failed to start audio streaming, will try again...\n");
                     }
                 }
+
+                // If we weren't successful, and are going to try again,
+                // make sure the watchdog is fed
+                if (gWatchdogIntervalSeconds > 0) {
+                    watchdogHandler();
+                }
+
                 sleep(1);
             }
         } else {
