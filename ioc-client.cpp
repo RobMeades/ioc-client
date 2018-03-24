@@ -40,9 +40,6 @@
 // The default location for log files
 #define DEFAULT_LOG_FILE_PATH "./logtmp"
 
-// GPIO pin to use for "I'm streaming" indication
-#define NOW_STREAMING_PIN 0 // GPIO0, header pin 11, parallel with I2S clock
-
 /* ----------------------------------------------------------------
  * STATIC VARIABLES
  * -------------------------------------------------------------- */
@@ -56,6 +53,9 @@ static size_t gLogWriteTicker;
 // Watchdog timer interval.
 static long long unsigned int gWatchdogIntervalSeconds;
 
+// The GPIO pin to toggle.
+static int gGpio = -1;
+
 /* ----------------------------------------------------------------
  * STATIC FUNCTIONS
  * -------------------------------------------------------------- */
@@ -63,15 +63,15 @@ static long long unsigned int gWatchdogIntervalSeconds;
 // Print the usage text
 static void printUsage(char * pExeName) {
     printf("\n%s: run the Internet of Chuffs client.  Usage:\n", pExeName);
-    printf("    %s audio_source audio_server_url <-ls log_server_url> <-ld log_directory>\n", pExeName);
+    printf("    %s audio_source audio_server_url <-ls log_server_url> <-ld log_directory> <-p gpio>\n", pExeName);
     printf("where:\n");
     printf("    audio_source is the name of the ALSA PCM audio capture device (must be 32 bits per channel, stereo, 16 kHz sample rate),\n");
     printf("    audio_server_url is the URL of the Internet of Chuffs server,\n");
     printf("    -ls optionally specifies the URL of a server to upload log-files to (where a logging server application must be listening),\n");
     printf("    -ld optionally specifies the directory to use for log files (default %s); the directory will be created if it does not exist,\n", DEFAULT_LOG_FILE_PATH);
+    printf("    -p optionally specifies a GPIO pin to toggle to show activity (using wiringPi numbering),\n");
     printf("For example:\n");
-    printf("    %s mic io-server.co.uk:1297 -ls logserver.com -ld /var/log\n\n", pExeName);
-    printf("Note: when the client is connected and successfully transmitting audio to the server GPIO%d will toggle.", NOW_STREAMING_PIN);
+    printf("    %s mic io-server.co.uk:1297 -ls logserver.com -ld /var/log -p 0\n\n", pExeName);
 }
 
 // Exit handler
@@ -79,9 +79,10 @@ static void exitHandler(int retValue)
 {
     printf("\nStopping.\n");
     stopAudioStreaming();
-    digitalWrite(NOW_STREAMING_PIN, LOW);
+    digitalWrite(gGpio, LOW);
     printLog();
     deinitLog();
+    deinitTimers();
     exit(retValue); 
 }
 
@@ -100,16 +101,17 @@ static void watchdogHandler()
     }
 }
 
-// Now streaming handler
-static void nowStreamingHandler()
+// Handler to toggle the LED
+static void ledToggleHandler()
 {
-    int x = 0;
-    
-    // Toggle the "I'm streaming" LED
-    if (digitalRead(NOW_STREAMING_PIN) == 0) {
-        x = 1;
+    if (gGpio >= 0) {
+        int x = 0;
+        // Toggle the LED
+        if (digitalRead(gGpio) == 0) {
+            x = 1;
+        }
+        digitalWrite(gGpio, x);
     }
-    digitalWrite(NOW_STREAMING_PIN, x);
 }
 
 /* ----------------------------------------------------------------
@@ -167,6 +169,12 @@ int main(int argc, char *argv[])
             if (x < argc) {
                 pLogFilePath = argv[x];
             }
+        // Test for gpio option
+        } else if (strcmp(argv[x], "-p") == 0) {
+            x++;
+            if (x < argc) {
+                gGpio = atoi(argv[x]);
+            }
         }
         x++;
     }
@@ -193,6 +201,9 @@ int main(int argc, char *argv[])
             if (pLogFilePath != NULL) {
                 printf(", temporarily storing log files in directory \"%s\"", pLogFilePath);
             }
+            if (gGpio >= 0) {
+                printf(", GPIO%d will be toggled to show activity", gGpio);
+            }
             printf(".\n");
 
             // Set up the CTRL-C handler
@@ -218,15 +229,17 @@ int main(int argc, char *argv[])
                 gWatchdogIntervalSeconds = 0;
             }
 
-            // Set up wiringPi and the "I'm streaming" pin
-            wiringPiSetup();
-            pinMode(NOW_STREAMING_PIN, OUTPUT);
+            // Set up wiringPi and the LED pin
+            if(gGpio >= 0) {
+                wiringPiSetup();
+                pinMode(gGpio, OUTPUT);
+            }
 
             // Start
             while (1) {
                 // Keep it up until CTRL-C
                 if (!audioIsStreaming()) {
-                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler, nowStreamingHandler)) {
+                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler, ledToggleHandler)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
                         // Safe to upload log files now we've succeeded in making
                         // one connection

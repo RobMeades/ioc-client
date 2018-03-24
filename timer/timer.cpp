@@ -44,6 +44,9 @@ static TimerNode *gpHead = NULL;
 // Keep track of the number of timers running.
 static int gNumTimers = 0;
 
+// A bool to know we're running.
+static bool gInited = false;
+
 /* ----------------------------------------------------------------
  * STATIC FUNCTIONS
  * --------------------------------------------------------------*/
@@ -123,18 +126,25 @@ static void *pTimerThread(void *pData /* not used */)
 // Initialise this code.
 bool initTimers()
 {
-    return pthread_create(&gThreadId, NULL, pTimerThread, NULL) == 0;
+    if (pthread_create(&gThreadId, NULL, pTimerThread, NULL) == 0) {
+        gInited = true;
+    }
+    return gInited;
 }
 
 // Shut down this code.
 void deinitTimers()
 {
-    while (gpHead) {
-        stopTimer((size_t) gThreadId);
-    }
+    if (gInited) {
+        while (gpHead) {
+            stopTimer((size_t) gThreadId);
+        }
 
-    pthread_cancel(gThreadId);
-    pthread_join(gThreadId, NULL);
+        pthread_cancel(gThreadId);
+        pthread_join(gThreadId, NULL);
+    }
+    
+    gInited = false;
     gNumTimers = 0;
 }
 

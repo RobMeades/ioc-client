@@ -565,7 +565,13 @@ You should do a similar thing to allow SSH/SFTP access for the Raspberry Pi for 
 
 `ssh -p xxxx -l username localhost`
 
-...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.
+...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.  You can also retrieve files over the same tunnel with SFTP as follows:
+
+`sftp -P xxxx username@localhost:/path_to_file`
+
+...where `xxxx` is the listening port on the remote machine, `username` is your user name on the Raspberry Pi and `path_to_file` is the full path of the file you want to retrieve from the Raspberry Pi.  Or you can enter an interactive SFTP session with:
+
+`sftp -P xxxx username@localhost`
 
 # Running Everything Automatically
 To start up the cellular connection and open an SSH tunnel to the server at boot, you need to create a couple of services.  First create the file `/lib/systemd/system/cellular.service` with contents as follows:
@@ -713,6 +719,37 @@ In terms of the dynamic behaviour, all of the stuff on the Raspberry Pi (the cel
 At least, that's the strategy.
 
 # Further Optimisations
+## Providing User Feedback
+The `ioc-client` has a parameter `-p` which will cause it to flash an LED connected to a GPIO line once it is connected and streaming.  So that the user gets broader feedback, I created [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and called this with the same GPIO as I passed to `ioc-client` but with different flash rates for different stages in the connection process.  To do this, install [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and create a Bash script called `flashyflashy.sh` of the following form:
+
+```
+#!/bin/bash
+
+pkill -signal SIGINT flashyflashy
+path_to_flashyflashy $1 $2 &
+```
+...where `path_to_flashyflashy` is the path to the `flashyflashy` executable, and make it executable with `sudo chmod +x flashyflashy.sh`.  Then in, for instance, the `systemd` files for the `cellular`, `urtp-tunnel` and `ioc-client` services, just before the `ExecStart` line, add an `ExecStartPre` line as follows:
+
+`ExecStartPre=path_to_flashyflashy.sh x y`
+
+...where `x` is the same GPIO line that you pass to `ioc-client` and `y` is the desired duration for that part of the start-up process (e.g. `1000` for `cellular`, `500` for `urtp-tunnel` and `100` for `ioc-client`).  To make this simpler I created an environment variable `LED` in `/etc/environment` for the GPIO number for all the services to pick up.
+
+I also included very initial feedback by calling wiringPi's `gpio` utility in a service `led-on` that starts at boot to simply switch the LED on:
+
+```
+[Unit]
+Description=Switch on the LED
+
+[Service]
+ExecStart=/usr/local/bin/gpio write LED 1
+ExecStop=/usr/local/bin/gpio write LED 0
+Restart=on-failure
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## DNS
 This is not essential, given the SSH tunnelling above, but I decided to set up the Raspberry Pi to use a DDNS account at www.noip.com so that I know its IP address.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 

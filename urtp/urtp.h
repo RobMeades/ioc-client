@@ -405,24 +405,6 @@ protected:
      */
     void(*_datagramOverflowStopCb)(int);
 
-    /** The raw samples coming from the I2S interface can,
-     * at least in the case of the STM32F4 I2S interface, be
-     * in any one of four orientations:
-     *
-     * 0: 23 01 xx 45 FF FF FF FF
-     * 1: FF FF 23 01 xx 45 FF FF
-     * 2: FF FF FF FF 23 01 xx 45
-     * 3: xx 45 FF FF FF FF 23 01
-     *
-     * This variable tracks the orientation, -1 meaning that the
-     * orientation is unknown.
-     */
-    int _rawSampleRotation;
-
-    /** A place to put the rotations of the samples while we're checking them.
-     */
-    int _rotationBuffer[SAMPLES_PER_BLOCK];
-
     /** The number of samples that have been used so far in
      * evaluation the audio bit-shift
      */

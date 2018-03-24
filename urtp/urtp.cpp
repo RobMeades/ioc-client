@@ -138,17 +138,15 @@ inline int Urtp::getMonoSample(const uint32_t *stereoSample)
     const char * pByte = (const char *) stereoSample;
     unsigned int retValue = 0;
 
-    if (_rawSampleRotation >= 0) {
-        // LSB
-        retValue = (unsigned int) *(pByte + 1);
-        // Middle byte
-        retValue += ((unsigned int) *(pByte + 2)) << 8;
-        // MSB
-        retValue += ((unsigned int) *(pByte + 3)) << 16;
-        // Sign extend
-        if (retValue & 0x800000) {
-            retValue |= 0xFF000000;
-        }
+    // LSB
+    retValue = (unsigned int) *(pByte + 1);
+    // Middle byte
+    retValue += ((unsigned int) *(pByte + 2)) << 8;
+    // MSB
+    retValue += ((unsigned int) *(pByte + 3)) << 16;
+    // Sign extend
+    if (retValue & 0x800000) {
+        retValue |= 0xFF000000;
     }
 
 #ifdef ENABLE_STREAM_FIXED_TONE
