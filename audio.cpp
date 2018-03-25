@@ -63,6 +63,11 @@
 // The default audio setup data.
 #define AUDIO_DEFAULT_FIXED_GAIN -1
 
+// The TCP buffer size for audio streaming:
+// keep it small as we don't want audio to build
+// up in the buffers, resulting in non real-timeness
+#define AUDIO_TCP_BUFFER_SIZE 25000
+
 /* ----------------------------------------------------------------
  * CALLBACK FUNCTION PROTOTYPES
  * -------------------------------------------------------------- */
@@ -196,10 +201,10 @@ static bool startAudioStreamingConnection()
     char *pBuf = new char[AUDIO_MAX_LEN_SERVER_URL];
     struct hostent *pHostEntries = NULL;
     int port;
-    const int setOption = 1;
+    int setOption;
     struct timeval tv = {0};
     int x;
-    
+
     tv.tv_sec = 1; /* 1 second timeout */
 
     LOG(EVENT_AUDIO_STREAMING_CONNECTION_START, 0);
@@ -250,10 +255,20 @@ static bool startAudioStreamingConnection()
     }
     printf("Setting TCP_NODELAY in TCP socket options...\n");
     // Set TCP_NODELAY (1) in level IPPROTO_TCP (6) to 1
+    setOption = 1;
     x = setsockopt(gSocket, IPPROTO_TCP, TCP_NODELAY, (void *) &setOption, sizeof(setOption));
     if (x < 0) {
         LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
         printf("Could not set TCP_NODELAY in socket options (%s).\n", strerror(errno));
+        return false;
+    }
+    printf("Setting SO_SNDBUF in TCP socket options...\n");
+    // Set SO_SNDBUF (0x1001) in level SOL_SOCKET (0xffff) to AUDIO_TCP_BUFFER_SIZE
+    setOption = AUDIO_TCP_BUFFER_SIZE;
+    x = setsockopt(gSocket, SOL_SOCKET, SO_SNDBUF, (void *) &setOption, sizeof(setOption));
+    if (x < 0) {
+        LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
+        printf("Could not set SO_SNDBUF to %d in socket options (%s).\n", AUDIO_TCP_BUFFER_SIZE, strerror(errno));
         return false;
     }
     LOG(EVENT_TCP_CONFIGURED, 0);
