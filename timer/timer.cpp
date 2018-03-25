@@ -137,7 +137,7 @@ void deinitTimers()
 {
     if (gInited) {
         while (gpHead) {
-            stopTimer((size_t) gThreadId);
+            stopTimer((size_t) gpHead);
         }
 
         pthread_cancel(gThreadId);

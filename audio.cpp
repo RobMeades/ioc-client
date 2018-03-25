@@ -42,7 +42,7 @@
 
 // For testing only: define this to also write incoming audio PCM
 // stream to file.
-//#define AUDIO_TEST_OUTPUT_FILENAME "/home/pi/audio.pcm"
+//#define AUDIO_TEST_OUTPUT_FILENAME "/rw/audio.pcm"
 
 // The maximum amount of time allowed to send a
 // datagram of audio over TCP.
@@ -294,11 +294,9 @@ static void encodeAudioData()
         if (retValue == -EPIPE) {
             LOG(EVENT_PCM_OVERRUN, retValue);
             snd_pcm_prepare(gpPcmHandle);
-        }
-        else if (retValue < 0) {
+        } else if (retValue < 0) {
             LOG(EVENT_PCM_ERROR, retValue);
-        }
-        else if (retValue != (int) gPcmFrames) {
+        } else if (retValue != (int) gPcmFrames) {
             LOG(EVENT_PCM_UNDERRUN, retValue);
         } else {
             // Encode the data
@@ -571,8 +569,8 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
             LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
+            }
         }
-    }
 
     printf("Starting task to encode audio data...\n");
     if (gpEncodeTask == NULL) {
@@ -581,8 +579,8 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
             LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 7);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
+            }
         }
-    }
 
     printf("Now streaming audio.\n");
 

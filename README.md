@@ -580,7 +580,7 @@ To start up the cellular connection and open an SSH tunnel to the server at boot
 [Unit]
 Description=Cellular connection
 BindsTo=dev-modem.device
-After=dev-modem.device
+After=dev-modem.device basic.target
      
 [Service]
 ExecStart=wvdial
@@ -720,36 +720,39 @@ At least, that's the strategy.
 
 # Further Optimisations
 ## Providing User Feedback
-The `ioc-client` has a parameter `-p` which will cause it to flash an LED connected to a GPIO line once it is connected and streaming.  So that the user gets broader feedback, I created [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and called this with the same GPIO as I passed to `ioc-client` but with different flash rates for different stages in the connection process.  To do this, install [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and create a Bash script called `flashyflashy.sh` of the following form:
-
-```
-#!/bin/bash
-
-pkill -signal SIGINT flashyflashy
-path_to_flashyflashy $1 $2 &
-```
-...where `path_to_flashyflashy` is the path to the `flashyflashy` executable, and make it executable with `sudo chmod +x flashyflashy.sh`.  Then in, for instance, the `systemd` files for the `cellular`, `urtp-tunnel` and `ioc-client` services, just before the `ExecStart` line, add an `ExecStartPre` line as follows:
-
-`ExecStartPre=path_to_flashyflashy.sh x y`
-
-...where `x` is the same GPIO line that you pass to `ioc-client` and `y` is the desired duration for that part of the start-up process (e.g. `1000` for `cellular`, `500` for `urtp-tunnel` and `100` for `ioc-client`).  To make this simpler I created an environment variable `LED` in `/etc/environment` for the GPIO number for all the services to pick up.
-
-I also included very initial feedback by calling wiringPi's `gpio` utility in a service `led-on` that starts at boot to simply switch the LED on:
+The `ioc-client` has a parameter `-p` which will cause it to flash an LED connected to a GPIO line once it is connected and streaming.  So that the user gets broader feedback, I created [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and called this with the same GPIO as I passed to `ioc-client` but with a slower flash rate to indicate that the Raspberry Pi is alive.  To make this simpler I created an environment variable `LED` in `/etc/environment` so that everyone can pick up the same GPIO number.  Install [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and then create a service called something like `/lib/systemd/system/led-on.service` with the following contents:
 
 ```
 [Unit]
-Description=Switch on the LED
+Description=Flash LED when up
+DefaultDependencies=no
+After=local-fs-pre.target
+Before=basic.target
+ 
+[Service]
+ExecStart=path_to_flashyflashy LED 1000
+Restart=on-failure
+KillSignal=SIGINT
+
+[Install]
+WantedBy=basic.target
+```
+...where `path_to_flashyflashy` is the path to the `flashyflashy` executable.  Then enable this to run at boot with `sudo systemctl enable led-on`.  Since it's quite nice to know when cellular is connected, I created another of these called `/lib/systemd/system/led-on-network.service` with the following contents and enabled that to start at boot also:
+
+```
+[Unit]
+Description=Flash LED when on-line
+Wants=network-online.target
+After=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/gpio write LED 1
-ExecStop=/usr/local/bin/gpio write LED 0
+ExecStart=path_to_flashyflashy LED 100
 Restart=on-failure
-RemainAfterExit=true
+KillSignal=SIGINT
 
 [Install]
 WantedBy=multi-user.target
 ```
-
 ## DNS
 This is not essential, given the SSH tunnelling above, but I decided to set up the Raspberry Pi to use a DDNS account at www.noip.com so that I know its IP address.  Do this by configuring a DDNS end point for the Raspberry Pi in your www.noip.com account.  Then download and build the Linux update client on the Raspberry Pi as follows:
 
