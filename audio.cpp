@@ -50,7 +50,7 @@
 
 // If we've had consecutive socket errors on the
 // audio streaming socket for this long, it's gone bad.
-#define AUDIO_MAX_DURATION_SOCKET_ERRORS_MS 1000
+#define AUDIO_MAX_DURATION_SOCKET_ERRORS_MS 3000
 
 // The audio send data task will run anyway this interval,
 // necessary in order to terminate it in an orderly fashion.
@@ -346,7 +346,7 @@ static int tcpSend(const char *pData, int size)
         }
 
         if (x < 0) {
-            count = x;
+            count = errno;
         }
     }
 
@@ -362,6 +362,7 @@ static void sendAudioData()
     struct timeval start;
     struct timeval end;
     struct timeval badStart;
+    bool badStarted = false;
     struct timespec runAnywayTime;
     unsigned long durationMs;
     int retValue;
@@ -369,24 +370,27 @@ static void sendAudioData()
 
     runAnywayTime.tv_sec = AUDIO_SEND_DATA_RUN_ANYWAY_TIME_S;
     runAnywayTime.tv_nsec = 0;
-    while (gAudioCommsConnected && (sem_trywait(&gStopSendTask) != 0)) {
-        
-        // Wait for at least one datagram to be ready to send
-        sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
 
-        while ((pUrtpDatagram = gUrtp.getUrtpDatagram()) != NULL) {
-            okToDelete = false;
-            gettimeofday(&start, NULL);
-            // Send the datagram
-            if (gAudioCommsConnected) {
+    while (sem_trywait(&gStopSendTask) != 0) {
+        if (gAudioCommsConnected) {
+            // Wait for at least one datagram to be ready to send
+            sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
+            while (gAudioCommsConnected && (pUrtpDatagram = gUrtp.getUrtpDatagram()) != NULL) {
+                okToDelete = false;
+                gettimeofday(&start, NULL);
+                // Send the datagram
                 //LOG(EVENT_SEND_START, (int) pUrtpDatagram);
                 retValue = tcpSend(pUrtpDatagram, URTP_DATAGRAM_SIZE);
 
                 if (retValue != URTP_DATAGRAM_SIZE) {
-                    gettimeofday(&badStart, NULL);
+                    if (!badStarted) {
+                        badStarted = true;
+                        gettimeofday(&badStart, NULL);
+                    }
                     LOG(EVENT_SEND_FAILURE, retValue);
                     gNumAudioSendFailures++;
                 } else {
+                    badStarted = false;
                     if (gpNowStreamingHandler != NULL) {
                         gpNowStreamingHandler();
                     }
@@ -395,13 +399,14 @@ static void sendAudioData()
                 }
                 //LOG(EVENT_SEND_STOP, (int) pUrtpDatagram);
 
-                if (retValue < 0) {
+                if (badStarted) {
                     // If the connection has gone, set a flag that will be picked up outside this function and
-                    // cause us to start again
+                    // cause us to shut down cleanly
                     gettimeofday(&end, NULL);
                     durationMs = (unsigned long) timeDifference(&badStart, &end) / 1000;
                     if (durationMs > AUDIO_MAX_DURATION_SOCKET_ERRORS_MS) {
                         LOG(EVENT_SOCKET_ERRORS_FOR_TOO_LONG, durationMs);
+                        gAudioCommsConnected = false;
                     }
                     if ((retValue == ENOTCONN) ||
                         (retValue == ECONNRESET) ||
@@ -411,32 +416,38 @@ static void sendAudioData()
                         gAudioCommsConnected = false;
                     }
                 }
-            }
-            gettimeofday(&end, NULL);
-            durationMs = (unsigned long) timeDifference(&start, &end) / 1000;
-            gAverageAudioDatagramSendDuration += durationMs;
-            gNumAudioDatagrams++;
+                gettimeofday(&end, NULL);
+                durationMs = (unsigned long) timeDifference(&start, &end) / 1000;
+                gAverageAudioDatagramSendDuration += durationMs;
+                gNumAudioDatagrams++;
 
-            if (durationMs > BLOCK_DURATION_MS) {
-                gNumAudioDatagramsSendTookTooLong++;
-            } else {
-                //LOG(EVENT_SEND_DURATION, duration);
-            }
-            if (durationMs > gWorstCaseAudioDatagramSendDuration) {
-                gWorstCaseAudioDatagramSendDuration = durationMs;
-                LOG(EVENT_NEW_PEAK_SEND_DURATION, durationMs);
-            }
+                if (durationMs > BLOCK_DURATION_MS) {
+                    gNumAudioDatagramsSendTookTooLong++;
+                } else {
+                    //LOG(EVENT_SEND_DURATION, duration);
+                }
+                if (durationMs > gWorstCaseAudioDatagramSendDuration) {
+                    gWorstCaseAudioDatagramSendDuration = durationMs;
+                    LOG(EVENT_NEW_PEAK_SEND_DURATION, durationMs);
+                }
 
-            if (okToDelete) {
-                gUrtp.setUrtpDatagramAsRead(pUrtpDatagram);
-            }
+                if (okToDelete) {
+                    gUrtp.setUrtpDatagramAsRead(pUrtpDatagram);
+                }
 
+                // Make sure the watchdog is fed
+                if (gpWatchdogHandler != NULL) {
+                    gpWatchdogHandler();
+                }
+            } // while() wait on URTP datagram
+        } else { // if() audio comms is connected
             // Make sure the watchdog is fed
             if (gpWatchdogHandler != NULL) {
                 gpWatchdogHandler();
             }
+            sleep(1);
         }
-    }
+    } // while() wait on gStopSendTask semaphore
 }
 
 /* ----------------------------------------------------------------
@@ -613,23 +624,28 @@ void stopAudioStreaming()
     gpNowStreamingHandler = NULL;
 
     if (gpEncodeTask != NULL) {
+        LOG(EVENT_AUDIO_STREAMING_STOP, 1);
         printf("Stopping audio encode task...\n");
         sem_post(&gStopEncodeTask);
         gpEncodeTask->join();
         delete gpEncodeTask;
         gpEncodeTask = NULL;
         printf("Audio encode task stopped.\n");
+        LOG(EVENT_AUDIO_STREAMING_STOP, 2);
     }
     
     if (gpSendTask != NULL) {
+        LOG(EVENT_AUDIO_STREAMING_STOP, 3);
         printf("Stopping audio send task...\n");
         sem_post(&gStopSendTask);
         gpSendTask->join();
         delete gpSendTask;
         gpSendTask = NULL;
         printf("Audio send task stopped.\n");
+        LOG(EVENT_AUDIO_STREAMING_STOP, 4);
     }
     
+    LOG(EVENT_AUDIO_STREAMING_STOP, 5);
     stopPcm();
     stopAudioStreamingConnection();
     stopTimer(gSecondTicker);

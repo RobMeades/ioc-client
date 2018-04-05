@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
             }
 
             // Set up wiringPi and the LED pin
-            if(gGpio >= 0) {
+            if (gGpio >= 0) {
                 wiringPiSetup();
                 pinMode(gGpio, OUTPUT);
             }
@@ -239,18 +239,17 @@ int main(int argc, char *argv[])
             while (1) {
                 // Keep it up until CTRL-C
                 if (!audioIsStreaming()) {
+                    // if we're not streaming then either we've not started or we've dropped
+                    // out of streaming.  In the latter case we need to clean up, so always
+                    // do that here just in case
+                    stopAudioStreaming();
                     if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler, ledToggleHandler)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
                         // Safe to upload log files now we've succeeded in making
-                        // one connection
+                        // at least one connection
                         if (!logFileUploadSuccess && (pLogUrl != NULL)) {
                             logFileUploadSuccess = beginLogFileUpload(pLogUrl);
                         }
-                    } else {
-                        // Always clean up, can't be sure at which point the startup
-                        // of streaming failed
-                        stopAudioStreaming();
-                        printf("Failed to start audio streaming, will try again...\n");
                     }
                 }
 
