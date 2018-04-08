@@ -125,7 +125,7 @@ static sem_t gStopEncodeTask;
 static sem_t gStopSendTask;
 
 // The URTP codec.
-static Urtp gUrtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
+static Urtp *gpUrtp = NULL;
 
 // The audio send socket.
 static int gSocket = -1;
@@ -189,7 +189,9 @@ static void audioMonitor(size_t timerId, void *pUserData)
     if (gNumAudioBytesSent > 0) {
         LOG(EVENT_THROUGHPUT_BITS_S, gNumAudioBytesSent << 3);
         gNumAudioBytesSent = 0;
-        LOG(EVENT_NUM_DATAGRAMS_QUEUED, gUrtp.getUrtpDatagramsAvailable());
+        if (gpUrtp != NULL) {
+            LOG(EVENT_NUM_DATAGRAMS_QUEUED, gpUrtp->getUrtpDatagramsAvailable());
+        }
     }
 }
 
@@ -315,7 +317,9 @@ static void encodeAudioData()
             LOG(EVENT_PCM_UNDERRUN, retValue);
         } else {
             // Encode the data
-            gUrtp.codeAudioBlock(gRawAudio);
+        if (gpUrtp != NULL) {
+                gpUrtp->codeAudioBlock(gRawAudio);
+        }
 #ifdef AUDIO_TEST_OUTPUT_FILENAME
             if (gpAudioOutputFile != NULL) {
                 fwrite(gRawAudio, sizeof(gRawAudio), 1, gpAudioOutputFile);
@@ -375,7 +379,7 @@ static void sendAudioData()
         if (gAudioCommsConnected) {
             // Wait for at least one datagram to be ready to send
             sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
-            while (gAudioCommsConnected && (pUrtpDatagram = gUrtp.getUrtpDatagram()) != NULL) {
+            while (gAudioCommsConnected && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
                 okToDelete = false;
                 gettimeofday(&start, NULL);
                 // Send the datagram
@@ -432,7 +436,7 @@ static void sendAudioData()
                 }
 
                 if (okToDelete) {
-                    gUrtp.setUrtpDatagramAsRead(pUrtpDatagram);
+                    gpUrtp->setUrtpDatagramAsRead(pUrtpDatagram);
                 }
 
                 // Make sure the watchdog is fed
@@ -520,7 +524,7 @@ static void stopPcm()
 {
     LOG(EVENT_PCM_STOP, 0);
     if (gpPcmHandle != NULL) {
-        snd_pcm_drain(gpPcmHandle);
+        snd_pcm_drop(gpPcmHandle);
         snd_pcm_close(gpPcmHandle);
         gpPcmHandle = NULL;
     }
@@ -559,7 +563,8 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     }
 
     printf("Setting up URTP...\n");
-    if (!gUrtp.init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
+    gpUrtp = new Urtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
+    if (!gpUrtp->init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 1);
         printf("Unable to start URTP.\n");
         return false;
@@ -652,6 +657,10 @@ void stopAudioStreaming()
     sem_destroy(&gUrtpDatagramReady);
     sem_destroy(&gStopEncodeTask);
     sem_destroy(&gStopSendTask);
+    if (gpUrtp != NULL) {
+        delete gpUrtp;
+        gpUrtp = NULL;
+    }
 
     printf("Audio streaming stopped.\n");
 }
