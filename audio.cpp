@@ -559,7 +559,6 @@ static void checkServerStatus()
                         x = helloRequestReceiveTime - helloRequestSendTime;
                         LOG(EVENT_UPLINK_DELAY_MICROSECONDS, x);
                         x = ((unsigned int) timestamp) - helloRequestSendTime;
-                        printf("helloRequestSendTime: %d, time now %d, difference %d.\n", helloRequestSendTime, (unsigned int) timestamp, x);
                         LOG(EVENT_ROUNDTRIP_DELAY_MICROSECONDS, x);
                     } else {
                         noValidResponseCount++;
