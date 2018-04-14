@@ -18,8 +18,8 @@
  * FUNCTION PROTOTYPES
  * -------------------------------------------------------------- */
 
-/** Get the uSecond system time.
- * @return the uSecond system time.
+/** Get the uSecond system time (UTC).
+ * @return the uSecond system time (UTC).
  */
 long long int getUSeconds(void);
 

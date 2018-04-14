@@ -25,7 +25,7 @@
  * PUBLIC FUNCTIONS
  * -------------------------------------------------------------- */
 
-// Get the uSecond system time.
+// Get the uSecond system time (UTC).
 long long int getUSeconds(void)
 {
     struct timespec ts;

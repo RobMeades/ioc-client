@@ -192,10 +192,10 @@ static void logFileUploadTask()
                 if (sock >= 0) {
                     LOG(EVENT_SOCKET_OPENED, x);
                     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv, sizeof(tv));
-                    LOG(EVENT_TCP_CONNECTING, x);
+                    LOG(EVENT_SOCKET_CONNECTING, x);
                     y = connect(sock, (struct sockaddr *) gpLoggingServer, sizeof(struct sockaddr));
                     if (y >= 0) {
-                        LOG(EVENT_TCP_CONNECTED, x);
+                        LOG(EVENT_SOCKET_CONNECTED, x);
                         LOG(EVENT_LOG_UPLOAD_STARTING, x);
                         sprintf(fileNameBuffer, "%s/%s", gLogPath, pDirEnt->d_name);
                         pFile = fopen(fileNameBuffer, "r");
@@ -236,7 +236,7 @@ static void logFileUploadTask()
                             LOG(EVENT_LOG_FILE_OPEN_FAILURE, errno);
                         }
                     } else {
-                        LOG(EVENT_TCP_CONNECT_FAILURE, errno);
+                        LOG(EVENT_SOCKET_CONNECT_FAILURE, errno);
                     }
                 } else {
                     LOG(EVENT_SOCKET_OPENING_FAILURE, errno);

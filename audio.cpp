@@ -89,6 +89,9 @@ static const char *gpAudioServerUrl = NULL;
 // For monitoring progress.
 static size_t gSecondTicker;
 
+// The Hello Request sequence number.
+static char gHelloRequestSequenceNumber;
+
 // ALSA handle for the PCM input device.
 static snd_pcm_t *gpPcmHandle = NULL;
 
@@ -115,6 +118,9 @@ static std::thread *gpEncodeTask = NULL;
 // Task to send data off to the audio streaming server.
 static std::thread *gpSendTask = NULL;
 
+// Task to check on the audio streaming server status.
+static std::thread *gpServerStatusTask = NULL;
+
 // Semaphore to communicate data transfer between tasks.
 static sem_t gUrtpDatagramReady;
 
@@ -124,11 +130,17 @@ static sem_t gStopEncodeTask;
 // Semaphore to stop the send task.
 static sem_t gStopSendTask;
 
+// Semaphore to stop the server status task.
+static sem_t gStopServerStatusTask;
+
 // The URTP codec.
 static Urtp *gpUrtp = NULL;
 
 // The audio send socket.
-static int gSocket = -1;
+static int gStreamingSocket = -1;
+
+// The UDP send socket.
+static int gUdpSocket = -1;
 
 // Flag to indicate that the audio comms channel is up.
 static volatile bool gAudioCommsConnected = false;
@@ -182,7 +194,6 @@ static void datagramOverflowStopCb(int numOverflows)
  * -------------------------------------------------------------- */
 
 // Monitor on a 1 second tick.
-// This is a ticker call-back, so nothing heavy please.
 static void audioMonitor(size_t timerId, void *pUserData)
 {
     // Monitor throughput
@@ -192,6 +203,31 @@ static void audioMonitor(size_t timerId, void *pUserData)
         if (gpUrtp != NULL) {
             LOG(EVENT_NUM_DATAGRAMS_QUEUED, gpUrtp->getUrtpDatagramsAvailable());
         }
+    }
+
+    // Send a Hello Request UDP packet if the socket is connected
+    if (gUdpSocket >= 0) {
+        char helloDatagram[AUDIO_HELLO_REQUEST_LENGTH];
+        long long int timestamp;
+        
+        helloDatagram[0] = AUDIO_HELLO_SYNC_BYTE;
+        helloDatagram[1] = gHelloRequestSequenceNumber;
+        timestamp = getUSeconds();
+        helloDatagram[2] = timestamp >> 56;
+        helloDatagram[3] = timestamp >> 48;
+        helloDatagram[4] = timestamp >> 40;
+        helloDatagram[5] = timestamp >> 32;
+        helloDatagram[6] = timestamp >> 24;
+        helloDatagram[7] = timestamp >> 16;
+        helloDatagram[8] = timestamp >> 8;
+        helloDatagram[9] = timestamp;
+        if (sendto(gUdpSocket, helloDatagram, sizeof(helloDatagram), 0, NULL, 0) == sizeof(helloDatagram)) {
+            LOG(EVENT_HELLO_REQUEST_SENT, gHelloRequestSequenceNumber);
+        } else {
+            printf("Could not send Hello Request (%s).\n", strerror(errno));
+            LOG(EVENT_HELLO_REQUEST_SEND_FAILURE, errno);
+        }
+        gHelloRequestSequenceNumber++;
     }
 }
 
@@ -237,55 +273,80 @@ static bool startAudioStreamingConnection()
             return false;
         }
     }
-    
-    printf("Opening socket to server for audio comms...\n");
+
+    printf("Opening UDP socket to server...\n");
     LOG(EVENT_SOCKET_OPENING, 0);
-    gSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (gSocket < 0) {
+    gHelloRequestSequenceNumber = 0;
+    gUdpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (gUdpSocket < 0) {
+        LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
+        printf("Could not open UDP socket to server (%s).\n", strerror(errno));
+        return false;
+    }
+    LOG(EVENT_SOCKET_OPENED, gUdpSocket);
+    printf("Setting socket to non-blocking (for the Hello Response)...\n");
+    x = fcntl(gUdpSocket, F_SETFL, O_NONBLOCK);
+    if (x < 0) {
+        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
+        printf("Could not set UDP socket to be non-blocking (%s).\n", strerror(errno));
+        return false;
+    }
+    LOG(EVENT_SOCKET_CONNECTING, 0);
+    printf("Connecting UDP...\n");
+    x = connect(gUdpSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
+    if (x < 0) {
+        LOG(EVENT_SOCKET_CONNECT_FAILURE, errno);
+        printf("Could not connect UDP socket (%s).\n", strerror(errno));
+        return false;
+    }
+    LOG(EVENT_SOCKET_CONNECTED, 0);
+
+    printf("Opening TCP socket to server for audio comms...\n");
+    LOG(EVENT_SOCKET_OPENING, 1);
+    gStreamingSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (gStreamingSocket < 0) {
         LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
         printf("Could not open TCP socket to audio streaming server (%s).\n", strerror(errno));
         return false;
     }
-    LOG(EVENT_SOCKET_OPENED, gSocket);
+    LOG(EVENT_SOCKET_OPENED, gStreamingSocket);
     
     printf("Setting timeout in TCP socket options...\n");
-    x = setsockopt(gSocket, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv, sizeof(tv));
+    x = setsockopt(gStreamingSocket, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv, sizeof(tv));
     if (x < 0) {
-        LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
+        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
         printf("Could not set timeout in TCP socket options (%s).\n", strerror(errno));
         return false;
     }
     printf("Setting TCP_NODELAY in TCP socket options...\n");
     // Set TCP_NODELAY (1) in level IPPROTO_TCP (6) to 1
     setOption = 1;
-    x = setsockopt(gSocket, IPPROTO_TCP, TCP_NODELAY, (void *) &setOption, sizeof(setOption));
+    x = setsockopt(gStreamingSocket, IPPROTO_TCP, TCP_NODELAY, (void *) &setOption, sizeof(setOption));
     if (x < 0) {
-        LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
+        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
         printf("Could not set TCP_NODELAY in socket options (%s).\n", strerror(errno));
         return false;
     }
     printf("Setting SO_SNDBUF in TCP socket options...\n");
     // Set SO_SNDBUF (0x1001) in level SOL_SOCKET (0xffff) to AUDIO_TCP_BUFFER_SIZE
     setOption = AUDIO_TCP_BUFFER_SIZE;
-    x = setsockopt(gSocket, SOL_SOCKET, SO_SNDBUF, (void *) &setOption, sizeof(setOption));
+    x = setsockopt(gStreamingSocket, SOL_SOCKET, SO_SNDBUF, (void *) &setOption, sizeof(setOption));
     if (x < 0) {
-        LOG(EVENT_TCP_CONFIGURATION_FAILURE, errno);
+        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
         printf("Could not set SO_SNDBUF to %d in socket options (%s).\n", AUDIO_TCP_BUFFER_SIZE, strerror(errno));
         return false;
     }
-    LOG(EVENT_TCP_CONFIGURED, 0);
+    LOG(EVENT_SOCKET_CONFIGURED, 1);
     
-    LOG(EVENT_TCP_CONNECTING, 0);
+    LOG(EVENT_SOCKET_CONNECTING, 1);
     printf("Connecting TCP...\n");
-    x = connect(gSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
+    x = connect(gStreamingSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
     if (x < 0) {
-        LOG(EVENT_TCP_CONNECT_FAILURE, errno);
+        LOG(EVENT_SOCKET_CONNECT_FAILURE, errno);
         printf("Could not connect TCP socket (%s).\n", strerror(errno));
         return false;
     }
-    LOG(EVENT_TCP_CONNECTED, 0);
-    
-    gAudioCommsConnected = true;
+    LOG(EVENT_SOCKET_CONNECTED, 1);
 
     return true;
 }
@@ -294,9 +355,16 @@ static bool startAudioStreamingConnection()
 static void stopAudioStreamingConnection()
 {
     LOG(EVENT_AUDIO_STREAMING_CONNECTION_STOP, 0);
-    printf("Closing audio server socket...\n");
-    close(gSocket);
-    gSocket = -1;
+    printf("Closing UDP server socket...\n");
+    LOG(EVENT_SOCKET_CLOSING, 0);
+    close(gUdpSocket);
+    gUdpSocket = -1;
+    LOG(EVENT_SOCKET_CLOSED, 0);
+    printf("Closing streaming audio server socket...\n");
+    LOG(EVENT_SOCKET_CLOSING, 1);
+    close(gStreamingSocket);
+    gStreamingSocket = -1;
+    LOG(EVENT_SOCKET_CLOSED, 1);
     gAudioCommsConnected = false;
 }
 
@@ -318,7 +386,7 @@ static void encodeAudioData()
         } else {
             // Encode the data
         if (gpUrtp != NULL) {
-                gpUrtp->codeAudioBlock(gRawAudio);
+            gpUrtp->codeAudioBlock(gRawAudio);
         }
 #ifdef AUDIO_TEST_OUTPUT_FILENAME
             if (gpAudioOutputFile != NULL) {
@@ -339,7 +407,7 @@ static int tcpSend(const char *pData, int size)
     if (gAudioCommsConnected) {
         gettimeofday(&start, NULL); 
         while ((count < size) && (((unsigned long) timeDifference(&start, NULL) / 1000) < AUDIO_TCP_SEND_TIMEOUT_MS)) {
-            x = send(gSocket, pData + count, size - count, 0);
+            x = send(gStreamingSocket, pData + count, size - count, 0);
             if (x > 0) {
                 count += x;
             }
@@ -454,6 +522,68 @@ static void sendAudioData()
     } // while() wait on gStopSendTask semaphore
 }
 
+// Check the status of the audio streaming server
+// This task should be run in the background.  It will
+// check that we get a Hello Response within the expected
+// interval
+static void checkServerStatus()
+{
+    int noValidResponseCount = 0;
+    
+    while (sem_trywait(&gStopServerStatusTask) != 0) {
+        if (gUdpSocket >= 0) {
+            char helloDatagram[AUDIO_HELLO_RESPONSE_LENGTH];
+            long long int timestamp;
+            unsigned int helloRequestSendTime;
+            unsigned int helloRequestReceiveTime;
+            int x;
+            
+            // Wait for a Hello Response UDP datagram (of the right length) on the non-blocking socket
+            if (recvfrom(gUdpSocket, helloDatagram, sizeof(helloDatagram), 0, NULL, 0) == AUDIO_HELLO_RESPONSE_LENGTH) {
+                timestamp = getUSeconds();
+                // Check if it has the right sync byte
+                if (helloDatagram[0] == AUDIO_HELLO_SYNC_BYTE) {
+                    // Is the sequence number in the right range?
+                    LOG(EVENT_HELLO_RESPONSE_RECEIVED, helloDatagram[1]);
+                    if (helloDatagram[1] > gHelloRequestSequenceNumber - AUDIO_HELLO_RESPONSE_WAIT_S) {
+                        if (!gAudioCommsConnected) {
+                            LOG(EVENT_AUDIO_SERVER_CONNECTED, gHelloRequestSequenceNumber);
+                            printf("Now connected to audio streaming server.\n");
+                            gAudioCommsConnected = true;
+                        }
+                        // Log the lower 4 bytes of the microsecond delay
+                        helloRequestSendTime = (((unsigned int) helloDatagram[6]) << 24) + (((unsigned int) helloDatagram[7]) << 16) +
+                                               (((unsigned int) helloDatagram[8]) << 8) + ((unsigned int) helloDatagram[9]);
+                        helloRequestReceiveTime = (((unsigned int) helloDatagram[14]) << 24) + (((unsigned int) helloDatagram[15]) << 16) +
+                                                  (((unsigned int) helloDatagram[16]) << 8) + ((unsigned int) helloDatagram[17]);
+                        x = helloRequestReceiveTime - helloRequestSendTime;
+                        LOG(EVENT_UPLINK_DELAY_MICROSECONDS, x);
+                        x = ((unsigned int) timestamp) - helloRequestSendTime;
+                        printf("helloRequestSendTime: %d, time now %d, difference %d.\n", helloRequestSendTime, (unsigned int) timestamp, x);
+                        LOG(EVENT_ROUNDTRIP_DELAY_MICROSECONDS, x);
+                    } else {
+                        noValidResponseCount++;
+                        LOG(EVENT_NO_HELLO_RESPONSE, 0x10 | noValidResponseCount);
+                    }
+                } else {
+                    noValidResponseCount++;
+                    LOG(EVENT_NO_HELLO_RESPONSE, 0x20 | noValidResponseCount);
+                }
+            } else {
+                noValidResponseCount++;
+                LOG(EVENT_NO_HELLO_RESPONSE, 0x30 | noValidResponseCount);
+            }
+            
+            if (noValidResponseCount > AUDIO_HELLO_RESPONSE_WAIT_S) {
+                LOG(EVENT_HELLO_RESPONSE_TIMEOUT, gHelloRequestSequenceNumber);
+                gAudioCommsConnected = false;
+                noValidResponseCount = 0;
+            }
+        }
+        sleep(1);
+    }
+}
+
 /* ----------------------------------------------------------------
  * STATIC FUNCTIONS: AUDIO CONTROL
  * -------------------------------------------------------------- */
@@ -553,29 +683,6 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     gpWatchdogHandler = pWatchdogHandler;
     gpNowStreamingHandler = pNowStreamingHandler;
 
-    // Start the per-second monitor tick and reset the diagnostics
-    LOG(EVENT_AUDIO_STREAMING_START, 0);
-    gSecondTicker = startTimer(1000000L, TIMER_PERIODIC, audioMonitor, NULL);
-
-    if (!startAudioStreamingConnection()) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 0);
-        return false;
-    }
-
-    printf("Setting up URTP...\n");
-    gpUrtp = new Urtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
-    if (!gpUrtp->init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 1);
-        printf("Unable to start URTP.\n");
-        return false;
-    }
-
-    printf("Starting PCM...\n");
-    if (!startPcm()) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 2);
-        return false;
-    }
-
     printf("Initialising semaphores...\n");
     if (sem_init(&gUrtpDatagramReady, false, 0) != 0) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
@@ -592,12 +699,50 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
         printf("Error initialising gStopSendTask semaphore (%s).\n", strerror(errno));
         return false;
     }
+    if (sem_init(&gStopServerStatusTask, false, 0) != 0) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
+        printf("Error initialising gStopServerStatusTask semaphore (%s).\n", strerror(errno));
+        return false;
+    }
+
+    // Start the per-second monitor tick and reset the diagnostics
+    LOG(EVENT_AUDIO_STREAMING_START, 0);
+    gSecondTicker = startTimer(1000000L, TIMER_PERIODIC, audioMonitor, NULL);
+
+    if (!startAudioStreamingConnection()) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 0);
+        return false;
+    }
+
+    printf("Starting task to check that the audio streaming server is there...\n");
+    if (gpServerStatusTask == NULL) {
+        gpServerStatusTask = new std::thread(checkServerStatus);
+        if (gpServerStatusTask == NULL) {
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 1);
+            printf("Error starting task (%s).\n", strerror(errno));
+            return false;
+        }
+    }
+
+    printf("Setting up URTP...\n");
+    gpUrtp = new Urtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
+    if (!gpUrtp->init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 2);
+        printf("Unable to start URTP.\n");
+        return false;
+    }
+
+    printf("Starting PCM...\n");
+    if (!startPcm()) {
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
+        return false;
+    }
 
     printf("Starting task to send audio data...\n");
     if (gpSendTask == NULL) {
         gpSendTask = new std::thread(sendAudioData);
         if (gpSendTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
             }
@@ -607,14 +752,19 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     if (gpEncodeTask == NULL) {
         gpEncodeTask = new std::thread(encodeAudioData);
         if (gpEncodeTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 7);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
             }
         }
 
-    printf("Now streaming audio.\n");
-
+    printf("Now, hopefully, streaming audio.\n");
+    
+    // Wait a few second for the link to the server to really establish
+    for (int x = 0; !gAudioCommsConnected && (x < AUDIO_SERVER_LINK_ESTABLISHMENT_WAIT_S); x++) {
+        sleep(1);
+    }
+    
     return true;
 }
 
@@ -650,13 +800,25 @@ void stopAudioStreaming()
         LOG(EVENT_AUDIO_STREAMING_STOP, 4);
     }
     
-    LOG(EVENT_AUDIO_STREAMING_STOP, 5);
+    if (gpServerStatusTask != NULL) {
+        LOG(EVENT_AUDIO_STREAMING_STOP, 5);
+        printf("Stopping audio server status task...\n");
+        sem_post(&gStopServerStatusTask);
+        gpServerStatusTask->join();
+        delete gpServerStatusTask;
+        gpServerStatusTask = NULL;
+        printf("Audio server status task stopped.\n");
+        LOG(EVENT_AUDIO_STREAMING_STOP, 6);
+    }
+    
+    LOG(EVENT_AUDIO_STREAMING_STOP, 7);
     stopPcm();
     stopAudioStreamingConnection();
     stopTimer(gSecondTicker);
     sem_destroy(&gUrtpDatagramReady);
     sem_destroy(&gStopEncodeTask);
     sem_destroy(&gStopSendTask);
+    sem_destroy(&gStopServerStatusTask);
     if (gpUrtp != NULL) {
         delete gpUrtp;
         gpUrtp = NULL;

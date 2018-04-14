@@ -148,8 +148,9 @@ NOTE: when you do `sudo apt-get upgrade` this might happen again if the Linux ve
 
 Install the module with:
 
-`sudo cp sound/soc/codecs/snd-soc-ics43432.ko /lib/modules/`uname -r`/`
-
+```
+sudo cp sound/soc/codecs/snd-soc-ics43432.ko /lib/modules/`uname -r`/
+```
 Run `sudo depmod` so as to let Linux work out the dependencies.
 
 Finally, to load the module at boot, edit the file `/etc/modules` to add the line:
@@ -395,9 +396,9 @@ You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
 If you have the [server-side of the IoC](https://github.com/RobMeades/ioc-server) set up somewhere and, preferably, also have the [log server application](https://github.com/RobMeades/ioc-log) running on the same remote machine, you should now be able to connect `ioc-client` to them with:
 
-`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path`
+`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -p 0 -ls log_server:port -ld log_directory_path`
 
-...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.  When a connection is active GPIO0 will toggle on every transmit; it's probably useful to connect an LED (via a 1k resistor) between that pin and ground.
+...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `0` represents GPIO0, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.  When a connection is active GPIO0 will toggle on every transmit; it's probably useful to connect an LED (via a 1k resistor) between that pin and ground.
 
 # Security
 This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#making-incoming-tcp-connections-over-cellular) and [Running Everything Automatically](#running-everything-automatically).
@@ -428,9 +429,9 @@ If you find that an SSH tunnel won't connect or there are other end-to-end conne
 
 `netcat -v host xxxx`
 
-...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side netcat line on another Linux server on the internet, just to be sure that the server is visible.
+...where `host` is replaced by the address of the server and `xxxx` is the port.  If a connection is made, both ends will say so.  Try all of this initially with the Ethernet connection of the Raspberry Pi plugged in but bare in mind that if your server is on the same network then you aren't really testing things.  Maybe try running the client-side `netcat` line on another Linux server on the internet, just to be sure that the server is visible.
 
-If this works from the command line, make sure it also works in the `systemd` unit files by replacing the line that invokes the SSH client with the netcat client-side line.
+If this works from the command line, make sure it also works in the `systemd` unit files by replacing the line that invokes the SSH client with the `netcat` client-side line.
 
 # Installing A USB Cellular Modem
 First, edit `/boot/config.txt` to append the lines:
@@ -518,7 +519,7 @@ You should see the AT commands go past, all followed by nice `OK`'s from the mod
 --> secondary DNS address 212.9.0.136
 --> pppd: ▒[07]R
 ```
-...and the screen should stop scrolling.  Press <enter> to get back to the command prompt and type `ifconfig`.  You should now have a `ppp0` connection as well as the usual `eth0` etc.  To disconnect the PPP link and stop running-up your cellular bill, enter:
+...and the screen should stop scrolling.  Press the enter key to get back to the command prompt and type `ifconfig`.  You should now have a `ppp0` connection as well as the usual `eth0` etc.  To disconnect the PPP link and stop running-up your cellular bill, enter:
 
 `ps aux | grep wvdial`
 
@@ -549,13 +550,13 @@ I set up web server with the thought that I might want to control the Raspberry 
 Enter the local IP address of your Raspberry Pi into a browser and you should see the default `nginx` page with "Welcome to nginx!" on the top in large friendly letters.
 
 # Making Incoming TCP Connections Over Cellular
-There is a remaining issue in that cellular networks won't generally accept incoming TCP connections (e.g. for HTTP or for an incoming SSH terminal connection).  The trick to fix this is to use another SSH tunnel, one where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
+There is a remaining issue in that cellular networks won't generally accept incoming TCP connections (e.g. for HTTP or for an incoming SSH terminal connection).  The trick to fix this is to use a reverse SSH tunnel, one where the tunnel listens for TCP connections on the remote machine and forwards them to the Raspberry Pi.
 
 The command you want will be of the following form:
 
-`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ExitOnForwardFailure yes" -o "ServerAliveInterval 30" -o "ClientAliveInterval 30" -o "ClientAliveCountMax 2" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
+`ssh -o StrictHostKeyChecking=no -o "ConnectTimeout 10" -o "ExitOnForwardFailure yes" -o "ServerAliveInterval 30" -N -R xxxx:localhost:yyyy -i /home/username/ioc-client-key -p zzzz user@url`
 
-...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  `ExitOnForwardFailure yes` is added as, if the ssh client tries to re-establish the connection before the server has realised it has gone and released the port, the tunnel can be set-up but not bound to a port at the server end, in a sort of zombie state.  You ALSO need to make sure that, on the server side, you set `ClientAliveInterval` and `ClientAliveCountMax` so that, should the connection drop, the server will release the port and it can be re-established (see [ioc-server](https://github.com/RobMeades/ioc-server)).
+...where `xxxx` is the listening port on the remote machine, `yyyy` is the local port on the Raspberry Pi, `username` is replaced by your user name on the Raspberry Pi, `zzzz` is the SSH port number (if not 22), `user` is the username on the remote machine and `url` is the URL of the remove machine.  `ExitOnForwardFailure yes` is added as, if the ssh client tries to re-establish the connection before the server has realised it has gone and released the port, the tunnel can be set-up but not bound to a port at the server end, in a sort of zombie state.  You ALSO need to make sure that, on the server side, you set `ClientAliveInterval` and `ClientAliveCountMax` so that, should the connection drop, the server will release the port and it can be re-established (see [ioc-server](https://github.com/RobMeades/ioc-server#sshd-configuration)).
 
 If this is for the HTTP connection you probably want `xxxx` and `yyyy` to be something other than 80, in which case you must also edit the `nginx` configuration file `/etc/nginx/sites-enabled/default` and change the listening port as appropriate (and don't forget to `sudo service nginx restart` before testing it).  Once you've got the tunnel working, for incoming HTTP connections create a file called something like `/etc/systemd/system/http-tunnel.service` along the lines of the above, test it and enable it to start at boot like the others.  Then, on the remote machine, you should be able to open a browser and connect to `localhost:xxxx` to see the "Welcome to nginx!" page of the Raspberry Pi.  If you only have a command-line interface on the remote machine, you can test this with:
 
@@ -565,11 +566,11 @@ You should do a similar thing to allow SSH/SFTP access for the Raspberry Pi for 
 
 `ssh -p xxxx -l username localhost`
 
-...where `xxxx` is the listening port on the remote machine and `username` is your user name on the Raspberry Pi.  You can also retrieve files over the same tunnel with SFTP as follows:
+...where `xxxx` is the listening port you have specified and `username` is your user name on the Raspberry Pi.  You can also retrieve files over the same tunnel with SFTP as follows:
 
 `sftp -P xxxx username@localhost:/path_to_file`
 
-...where `xxxx` is the listening port on the remote machine, `username` is your user name on the Raspberry Pi and `path_to_file` is the full path of the file you want to retrieve from the Raspberry Pi.  Or you can enter an interactive SFTP session with:
+...where `xxxx` is the listening port you have specified, `username` is your user name on the Raspberry Pi and `path_to_file` is the full path of the file you want to retrieve from the Raspberry Pi.  Or you can enter an interactive SFTP session with:
 
 `sftp -P xxxx username@localhost`
 
@@ -606,11 +607,11 @@ Test it with:
 
 `sudo systemctl start cellular`
 
-Your modem should connect to the cellular network and, if you run `ifconfig`, you should see the `ppp0` connection appear.  Shut it down again to save your cellular bill with:
+Your modem should connect to the cellular network and, if you run `ifconfig`, you should see the `ppp0` connection appear.  Shut it down again to reduce your cellular bill with:
 
 `sudo systemctl stop cellular`
 
-To secure your outgoing audio path, create the file `/lib/systemd/system/urtp-tunnel.service` with contents as follows:
+To secure your outgoing audio path with an SSH tunnel, create the file `/lib/systemd/system/urtp-tunnel.service` with contents as follows:
 
 ```
 [Unit]
@@ -628,7 +629,7 @@ WantedBy=multi-user.target
 ```
 ...replacing `xxxx` with the local port for the SSH tunnel, `yyyy` with the remote port on the server for the SSH tunnel, `username` with your user name on the Raspberry Pi, adding `-p zzzz` if SSH is not on port 22, replacing `user` with your user name on the server and `host` with the IP address/URL of the server.
 
-Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will add the fingerprint of the server to the root account.
+Before you start the service, cut and paste your finalised `ExecStart` line and execute it on the command line directly with `sudo`.  This will prompt you to add the fingerprint of the server to the root account.
 
 Now test that the tunnel comes up correctly with:
 
@@ -661,7 +662,7 @@ Once you have everything running sweetly, create another `systemctl` unit file t
 Description=IoC client
 
 [Service]
-ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -ls log_server:port -ld log_directory_path
+ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -p 0 -ls log_server:port -ld log_directory_path
 WatchdogSec=10s
 Restart=on-failure
 RestartSec=3
@@ -671,7 +672,7 @@ KillSignal=SIGINT
 [Install]
 WantedBy=multi-user.target
 ```
-...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `log_server:port` is the URL where the [IoC logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
+...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `0` represents GPIO0, `log_server:port` is the URL where the [IoC logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
 
 Test that it works with:
 
@@ -701,10 +702,10 @@ By now, following the instructions here and for the [ioc-server](https://github.
 
 ...where 'Sxx' represents a socket and:
 
-* 'Sxu' is the socket for the SSH tunnel carrying URTP traffic (i.e. audio),
-* 'Sxl' is the socket for the SSH tunnel for uploading logs from the IoC application to the IoC logging application on the server,
-* 'Sxs' is the socket for SSH control (i.e. port 22) and,
-* 'Sxh' is the socket for the SSH tunnel carrying HTTP traffic.
+* 'Sxu' is the socket for the SSH tunnel carrying URTP traffic (i.e. audio) from the ioc-client application ("IoC") on the Raspberry Pi to the ioc-server ("IoC) application on the Linux Server,
+* 'Sxl' is the socket for the SSH tunnel for uploading logs from the ioc-client application ("IoC") on the Raspberry Pi to the ioc-log application ("Log") on the Linux Server,
+* 'Sxs' is the socket for SSH control (i.e. port 22) from the Linux Server back to the Raspberry Pi and,
+* 'Sxh' is a socket carrying HTTP traffic (two distinct cases of this: one into the Raspberry Pi for Nginx and the other from Users to the Linux Server for HLS traffic).
 
 'x' is either 'O' for outgoing or 'I' for incoming.
 
@@ -712,7 +713,7 @@ The SSH tunnels are there to negotiate the vagaries of cellular networks and to 
 
 In terms of the dynamic behaviour, all of the stuff on the Raspberry Pi (the cellular connection seen as PPP, all of the SSH tunnels and the IoC client application) will start and restart constantly in order to achieve the steady state of a connection over which URTP audio is streamed.  The SSH tunnels can be assumed to be stable once connected.  The weak point is, of course, the cellular connection; this may suffer from short or long periods of inability to transport data.  The PPP connection will stay up across short (10s of seconds) outages, only dropping when the modem considers that there really is no likelihood of traffic getting through any time soon.  And through this malaise the users must get the best possible service.  The strategy to do this is as follows:
 
-1.  The IoC server application will retain a HTTP Live Stream buffer of only the last ~10 seconds of audio.  This prevents stale, non-real-time audio from building up.
+1.  The IoC server application will retain a HTTP Live Stream buffer of only the last ~5 seconds of audio.  This prevents stale, non-real-time audio from building up.
 2.  The best outcome from cellular connectivity issues is achieved by allowing the cellular standard to do its stuff until PPP finally drops; the IoC client does this by continuing to send, irrespective of success, including re-starting the TCP connection if it drops.
 3.  The SSH tunnels include a keep-alive that is sufficiently regular to keep open the cellular network firewalls etc. but, given (2), don't otherwise pro-actively perform checking of the link.
 
@@ -720,7 +721,7 @@ At least, that's the strategy.
 
 # Further Optimisations
 ## Providing User Feedback
-The `ioc-client` has a parameter `-p` which will cause it to flash an LED connected to a GPIO line once it is connected and streaming.  So that the user gets broader feedback, I created [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and called this with the same GPIO as I passed to `ioc-client` but with a slower flash rate to indicate that the Raspberry Pi is alive.  To make this simpler I created an environment variable `LED` in `/etc/environment` so that everyone can pick up the same GPIO number.  Install [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and then create a service called something like `/lib/systemd/system/led-on.service` with the following contents:
+The `ioc-client` has a parameter `-p` which will cause it to flash an LED connected to a GPIO line once it is connected and streaming.  So that the user gets broader feedback, I created [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and called this with the same GPIO as I passed to `ioc-client` but with a slower flash rate to indicate that the Raspberry Pi is alive.  To make this simpler I created an environment variable `LED` in `/etc/environment` so that everyone can pick up the same GPIO number (so above, where you see the command line option `-p 0` to `ioc-client`, replace it with `-p LED`).  Install [flashyflashy](https://github.com/RobMeades/flashyflashy.git) and then create a service called something like `/lib/systemd/system/led-on.service` with the following contents:
 
 ```
 [Unit]
@@ -862,7 +863,7 @@ Disable `man` indexing by editing both `/etc/cron.weekly/man-db` and `/etc/cron.
 # Switched off in order to set SD card to read only
 exit 0
 ```
-Finally. stop the swap file from being used at next boot with:
+Finally, stop the swap file from being used at next boot with:
 
 ```
 sudo systemctl disable dphys-swapfile
@@ -883,7 +884,7 @@ If you installed `noip` as described in the [DNS](#dns) section above it will no
 
 `tmpfs    /var/log/nginx     tmpfs    defaults,noatime,nosuid,mode=0755,size=10m           0       0`
 
-Note that the DNS servers, stored in `/etc/resolv.conf`, may well be different for your cellular connection and your Ethernet connection.  You want to make sure that the disk is writeable when you are connected via cellular only, then the correct DNS servers for the cellular network will be stored in the read-only file, otherwise DNS look-up could fail when you are on cellular only.  That said, DNS look-up could then fail if you only have Ethernet connected (if the cellular network has its own DNS servers which are only accessible from inside the network), so it is best to move the `resolv.conf` file to an 'rw' area as follows:
+Note that the DNS servers, stored in `/etc/resolv.conf` when DNS sorts itself out at boot, may well be different for your cellular connection and your Ethernet connection.  You could make sure that the disk is writeable when you are connected via cellular only, then the correct DNS servers for the cellular network will be stored in the read-only file, otherwise DNS look-up could fail when you are on cellular only.  That said, DNS look-up could then fail if you only have Ethernet connected (if the cellular network has its own DNS servers which are only accessible from inside the network), so the better solution is to create an `rw` area following the instructions [below](#saving-logs-persistently-with-a-read-only-root) and then move the `resolv.conf` file to it as follows:
 
 ```
 sudo mv /etc/resolv.conf /rw/resolv.conf
@@ -1012,11 +1013,11 @@ Run `sudo blkid` to get the `PARTUUID` of the new partition.  In my case the out
 ```
 ...and hence the `PARTUUID` I needed was `a2ac960e-03`.
 
-Now edit `/etc/fstab` and add the line for the new partition, in my case:
+Now edit `/etc/fstab` and add the line for the new partition, in my case this was:
 
 `PARTUUID=a2ac960e-03  /rw             ext4    defaults,noatime    0       0`
 
-...just below the other two "PARTUUID" lines.
+...just below the other two `PARTUUID` lines.
 
 Now reboot.  Should the reboot fail, connect a monitor to the Raspberry Pi and determine what it is objecting to.  You should then be able to put the SD card back into your other Linux machine in order to fix the problem.
 
