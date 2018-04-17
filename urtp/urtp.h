@@ -252,6 +252,10 @@ public:
      */
 #   define URTP_DATAGRAM_STORE_SIZE (URTP_DATAGRAM_SIZE * MAX_NUM_DATAGRAMS)
 
+    /** URTP parameters: the sync byte.
+     */
+#   define SYNC_BYTE               0x5a
+
     /* Constructor.
      *
      * @param datagramReadyCb          Callback to be invoked once a URTP datagram
@@ -344,16 +348,18 @@ public:
      */
     int getUrtpDatagramsFreeMin();
 
+    /** Call this to get the last URTP sequence number.
+     *
+     * @return   the lsat URTP sequence number.
+     */
+    int getUrtpSequenceNumber();
+
 protected:
     /** The number of valid bytes in each mono sample of audio received
      * on the I2S stream (the number of bytes received may be larger
      * but some are discarded along the way).
      */
 #   define MONO_INPUT_SAMPLE_SIZE  3
-
-    /** URTP parameters: the sync byte.
-     */
-#   define SYNC_BYTE               0x5a
 
     /** The audio coding schemes.
      */

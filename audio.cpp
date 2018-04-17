@@ -89,9 +89,6 @@ static const char *gpAudioServerUrl = NULL;
 // For monitoring progress.
 static size_t gSecondTicker;
 
-// The Hello Request sequence number.
-static char gHelloRequestSequenceNumber;
-
 // ALSA handle for the PCM input device.
 static snd_pcm_t *gpPcmHandle = NULL;
 
@@ -139,8 +136,8 @@ static Urtp *gpUrtp = NULL;
 // The audio send socket.
 static int gStreamingSocket = -1;
 
-// The UDP send socket.
-static int gUdpSocket = -1;
+// Flag to indicate that the TCP connection is up.
+static bool gTcpConnected = false;
 
 // Flag to indicate that the audio comms channel is up.
 static volatile bool gAudioCommsConnected = false;
@@ -204,31 +201,6 @@ static void audioMonitor(size_t timerId, void *pUserData)
             LOG(EVENT_NUM_DATAGRAMS_QUEUED, gpUrtp->getUrtpDatagramsAvailable());
         }
     }
-
-    // Send a Hello Request UDP packet if the socket is connected
-    if (gUdpSocket >= 0) {
-        char helloDatagram[AUDIO_HELLO_REQUEST_LENGTH];
-        long long int timestamp;
-        
-        helloDatagram[0] = AUDIO_HELLO_SYNC_BYTE;
-        helloDatagram[1] = gHelloRequestSequenceNumber;
-        timestamp = getUSeconds();
-        helloDatagram[2] = timestamp >> 56;
-        helloDatagram[3] = timestamp >> 48;
-        helloDatagram[4] = timestamp >> 40;
-        helloDatagram[5] = timestamp >> 32;
-        helloDatagram[6] = timestamp >> 24;
-        helloDatagram[7] = timestamp >> 16;
-        helloDatagram[8] = timestamp >> 8;
-        helloDatagram[9] = timestamp;
-        if (sendto(gUdpSocket, helloDatagram, sizeof(helloDatagram), 0, NULL, 0) == sizeof(helloDatagram)) {
-            LOG(EVENT_HELLO_REQUEST_SENT, gHelloRequestSequenceNumber);
-        } else {
-            printf("Could not send Hello Request (%s).\n", strerror(errno));
-            LOG(EVENT_HELLO_REQUEST_SEND_FAILURE, errno);
-        }
-        gHelloRequestSequenceNumber++;
-    }
 }
 
 // Start the audio streaming connection.
@@ -274,35 +246,8 @@ static bool startAudioStreamingConnection()
         }
     }
 
-    printf("Opening UDP socket to server...\n");
-    LOG(EVENT_SOCKET_OPENING, 0);
-    gHelloRequestSequenceNumber = 0;
-    gUdpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (gUdpSocket < 0) {
-        LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
-        printf("Could not open UDP socket to server (%s).\n", strerror(errno));
-        return false;
-    }
-    LOG(EVENT_SOCKET_OPENED, gUdpSocket);
-    printf("Setting socket to non-blocking (for the Hello Response)...\n");
-    x = fcntl(gUdpSocket, F_SETFL, O_NONBLOCK);
-    if (x < 0) {
-        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
-        printf("Could not set UDP socket to be non-blocking (%s).\n", strerror(errno));
-        return false;
-    }
-    LOG(EVENT_SOCKET_CONNECTING, 0);
-    printf("Connecting UDP...\n");
-    x = connect(gUdpSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
-    if (x < 0) {
-        LOG(EVENT_SOCKET_CONNECT_FAILURE, errno);
-        printf("Could not connect UDP socket (%s).\n", strerror(errno));
-        return false;
-    }
-    LOG(EVENT_SOCKET_CONNECTED, 0);
-
     printf("Opening TCP socket to server for audio comms...\n");
-    LOG(EVENT_SOCKET_OPENING, 1);
+    LOG(EVENT_SOCKET_OPENING, 0);
     gStreamingSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (gStreamingSocket < 0) {
         LOG(EVENT_SOCKET_OPENING_FAILURE, errno);
@@ -311,6 +256,13 @@ static bool startAudioStreamingConnection()
     }
     LOG(EVENT_SOCKET_OPENED, gStreamingSocket);
     
+    printf("Setting socket to non-blocking (for the downlink timing datagram)...\n");
+    x = fcntl(gStreamingSocket, F_SETFL, O_NONBLOCK);
+    if (x < 0) {
+        LOG(EVENT_SOCKET_CONFIGURATION_FAILURE, errno);
+        printf("Could not set TCP socket to be non-blocking (%s).\n", strerror(errno));
+        return false;
+    }
     printf("Setting timeout in TCP socket options...\n");
     x = setsockopt(gStreamingSocket, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv, sizeof(tv));
     if (x < 0) {
@@ -336,17 +288,18 @@ static bool startAudioStreamingConnection()
         printf("Could not set SO_SNDBUF to %d in socket options (%s).\n", AUDIO_TCP_BUFFER_SIZE, strerror(errno));
         return false;
     }
-    LOG(EVENT_SOCKET_CONFIGURED, 1);
+    LOG(EVENT_SOCKET_CONFIGURED, 0);
     
-    LOG(EVENT_SOCKET_CONNECTING, 1);
+    LOG(EVENT_SOCKET_CONNECTING, 0);
     printf("Connecting TCP...\n");
     x = connect(gStreamingSocket, (struct sockaddr *) gpAudioServerAddress, sizeof(struct sockaddr));
-    if (x < 0) {
+    if ((x < 0) && (errno != EINPROGRESS)) {  // Socket will return EINPROGRESS if it is non-blocking
         LOG(EVENT_SOCKET_CONNECT_FAILURE, errno);
         printf("Could not connect TCP socket (%s).\n", strerror(errno));
         return false;
     }
-    LOG(EVENT_SOCKET_CONNECTED, 1);
+    gTcpConnected = true;
+    LOG(EVENT_SOCKET_CONNECTED, 0);
 
     return true;
 }
@@ -355,16 +308,12 @@ static bool startAudioStreamingConnection()
 static void stopAudioStreamingConnection()
 {
     LOG(EVENT_AUDIO_STREAMING_CONNECTION_STOP, 0);
-    printf("Closing UDP server socket...\n");
-    LOG(EVENT_SOCKET_CLOSING, 0);
-    close(gUdpSocket);
-    gUdpSocket = -1;
-    LOG(EVENT_SOCKET_CLOSED, 0);
     printf("Closing streaming audio server socket...\n");
-    LOG(EVENT_SOCKET_CLOSING, 1);
+    LOG(EVENT_SOCKET_CLOSING, 0);
+    gTcpConnected = false;
     close(gStreamingSocket);
     gStreamingSocket = -1;
-    LOG(EVENT_SOCKET_CLOSED, 1);
+    LOG(EVENT_SOCKET_CLOSED, 0);
     gAudioCommsConnected = false;
 }
 
@@ -404,7 +353,7 @@ static int tcpSend(const char *pData, int size)
     int count = 0;
     struct timeval start;
 
-    if (gAudioCommsConnected) {
+    if (gTcpConnected) {
         gettimeofday(&start, NULL); 
         while ((count < size) && (((unsigned long) timeDifference(&start, NULL) / 1000) < AUDIO_TCP_SEND_TIMEOUT_MS)) {
             x = send(gStreamingSocket, pData + count, size - count, 0);
@@ -444,10 +393,10 @@ static void sendAudioData()
     runAnywayTime.tv_nsec = 0;
 
     while (sem_trywait(&gStopSendTask) != 0) {
-        if (gAudioCommsConnected) {
+        if (gTcpConnected) {
             // Wait for at least one datagram to be ready to send
             sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
-            while (gAudioCommsConnected && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
+            while (gTcpConnected && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
                 okToDelete = false;
                 gettimeofday(&start, NULL);
                 // Send the datagram
@@ -524,62 +473,97 @@ static void sendAudioData()
 
 // Check the status of the audio streaming server
 // This task should be run in the background.  It will
-// check that we get a Hello Response within the expected
+// check that we get a timing datagram within the expected
 // interval
 static void checkServerStatus()
 {
-    int noValidResponseCount = 0;
-    
+    char timingDatagram[AUDIO_TIMING_DATAGRAM_LENGTH];
+    char *pBuffer;
+    long long int timestamp;
+    long long unsigned int datagramSendTime;
+    uint16_t lastUrtpSequenceNumber;
+    uint16_t sequenceNumber;
+    int x;
+    int noValidTimingDatagramCount = 0;
+    struct timeval start;
+
     while (sem_trywait(&gStopServerStatusTask) != 0) {
-        if (gUdpSocket >= 0) {
-            char helloDatagram[AUDIO_HELLO_RESPONSE_LENGTH];
-            long long int timestamp;
-            unsigned int helloRequestSendTime;
-            unsigned int helloRequestReceiveTime;
-            int x;
-            
-            // Wait for a Hello Response UDP datagram (of the right length) on the non-blocking socket
-            if (recvfrom(gUdpSocket, helloDatagram, sizeof(helloDatagram), 0, NULL, 0) == AUDIO_HELLO_RESPONSE_LENGTH) {
-                timestamp = getUSeconds();
-                // Check if it has the right sync byte
-                if (helloDatagram[0] == AUDIO_HELLO_SYNC_BYTE) {
-                    // Is the sequence number in the right range?
-                    LOG(EVENT_HELLO_RESPONSE_RECEIVED, helloDatagram[1]);
-                    if (helloDatagram[1] > gHelloRequestSequenceNumber - AUDIO_HELLO_RESPONSE_WAIT_S) {
-                        if (!gAudioCommsConnected) {
-                            LOG(EVENT_AUDIO_SERVER_CONNECTED, gHelloRequestSequenceNumber);
-                            printf("Now connected to audio streaming server.\n");
-                            gAudioCommsConnected = true;
+        if (gTcpConnected && (gpUrtp != NULL)) {
+            lastUrtpSequenceNumber = (uint16_t) gpUrtp->getUrtpSequenceNumber();
+            // Wait for up to 1 second for a timing datagram (of the right length) on the non-blocking socket
+            gettimeofday(&start, NULL);
+            for (pBuffer = timingDatagram; (pBuffer < timingDatagram + sizeof(timingDatagram)) && (timeDifference(&start, NULL) < 1000000);) {
+                //LOG(EVENT_RECEIVE_START, 0);
+                x = recv(gStreamingSocket, pBuffer, 1, 0);
+                if (x > 0) {
+                    //LOG(EVENT_RECEIVE_STOP, x); 
+                    if (*pBuffer == SYNC_BYTE) {
+                        for (pBuffer += 1; (pBuffer < timingDatagram + sizeof(timingDatagram)) && (timeDifference(&start, NULL) < 1000000);) {
+                            //LOG(EVENT_RECEIVE_START, 0);
+                            x = recv(gStreamingSocket, pBuffer, timingDatagram + sizeof(timingDatagram) - pBuffer, 0);
+                            if (x > 0) {
+                                pBuffer += x;
+                                //LOG(EVENT_RECEIVE_STOP, x);
+                            } else {
+                                if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {
+                                    LOG(EVENT_RECEIVE_FAILURE, errno);
+                                } else {
+                                    //LOG(EVENT_RECEIVE_STOP, 0);
+                                }
+                            }
+                            if (pBuffer < timingDatagram + sizeof(timingDatagram)) {
+                                usleep(100000); // Sleep only if we've not got the lot
+                            }
                         }
-                        // Log the lower 4 bytes of the microsecond delay
-                        helloRequestSendTime = (((unsigned int) helloDatagram[6]) << 24) + (((unsigned int) helloDatagram[7]) << 16) +
-                                               (((unsigned int) helloDatagram[8]) << 8) + ((unsigned int) helloDatagram[9]);
-                        helloRequestReceiveTime = (((unsigned int) helloDatagram[14]) << 24) + (((unsigned int) helloDatagram[15]) << 16) +
-                                                  (((unsigned int) helloDatagram[16]) << 8) + ((unsigned int) helloDatagram[17]);
-                        x = helloRequestReceiveTime - helloRequestSendTime;
-                        LOG(EVENT_UPLINK_DELAY_MICROSECONDS, x);
-                        x = ((unsigned int) timestamp) - helloRequestSendTime;
-                        LOG(EVENT_ROUNDTRIP_DELAY_MICROSECONDS, x);
-                    } else {
-                        noValidResponseCount++;
-                        LOG(EVENT_NO_HELLO_RESPONSE, 0x10 | noValidResponseCount);
                     }
                 } else {
-                    noValidResponseCount++;
-                    LOG(EVENT_NO_HELLO_RESPONSE, 0x20 | noValidResponseCount);
+                    if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {
+                        LOG(EVENT_RECEIVE_FAILURE, errno);
+                    } else {
+                        //LOG(EVENT_RECEIVE_STOP, 0);
+                    }
+                }
+                if (pBuffer < timingDatagram + sizeof(timingDatagram)) {
+                    usleep(100000); // Sleep only if we've not got the lot
+                }
+            }
+
+            if (pBuffer == timingDatagram + sizeof(timingDatagram)) {
+                timestamp = getUSeconds();
+                // Is the sequence number in the right range?
+                sequenceNumber = (((int) timingDatagram[1]) << 8) + timingDatagram[2];
+                LOG(EVENT_TIMING_DATAGRAM_RECEIVED, sequenceNumber);
+                if (sequenceNumber > lastUrtpSequenceNumber - (AUDIO_TIMING_DATAGRAM_AGE_S * 1000 / BLOCK_DURATION_MS)) {
+                    // Yup, it's a usable timing datagram
+                    noValidTimingDatagramCount = 0;
+                    if (!gAudioCommsConnected) {
+                        LOG(EVENT_AUDIO_SERVER_CONNECTED, lastUrtpSequenceNumber);
+                        printf("Now connected to audio streaming server.\n");
+                        gAudioCommsConnected = true;
+                    }
+                    // Get the send time of the audio datagram
+                    datagramSendTime = ((((long long unsigned int) timingDatagram[3]) << 54) + (((long long unsigned int) timingDatagram[4]) << 48) +
+                                        (((long long unsigned int) timingDatagram[5]) << 40) + (((long long unsigned int) timingDatagram[6]) << 32) + 
+                                        (((long long unsigned int) timingDatagram[7]) << 24) + (((long long unsigned int) timingDatagram[8]) << 16) +
+                                        (((long long unsigned int) timingDatagram[9]) << 8)  + (((long long unsigned int) timingDatagram[10])));
+                    LOG(EVENT_ROUNDTRIP_DELAY_MICROSECONDS, (int)((long long unsigned int) timestamp - datagramSendTime));
+                } else {
+                    noValidTimingDatagramCount++;
+                    LOG(EVENT_NO_TIMING_DATAGRAM_RECEIVED, noValidTimingDatagramCount);
                 }
             } else {
-                noValidResponseCount++;
-                LOG(EVENT_NO_HELLO_RESPONSE, 0x30 | noValidResponseCount);
+                noValidTimingDatagramCount++;
+                LOG(EVENT_NO_TIMING_DATAGRAM_RECEIVED, noValidTimingDatagramCount);
             }
-            
-            if (noValidResponseCount > AUDIO_HELLO_RESPONSE_WAIT_S) {
-                LOG(EVENT_HELLO_RESPONSE_TIMEOUT, gHelloRequestSequenceNumber);
+
+            if (noValidTimingDatagramCount > AUDIO_TIMING_DATAGRAM_WAIT_S) {
+                LOG(EVENT_TIMING_DATAGRAM_TIMEOUT, lastUrtpSequenceNumber);
                 gAudioCommsConnected = false;
-                noValidResponseCount = 0;
+                noValidTimingDatagramCount = 0;
             }
+
+            usleep(100000);
         }
-        sleep(1);
     }
 }
 
@@ -684,22 +668,22 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
 
     printf("Initialising semaphores...\n");
     if (sem_init(&gUrtpDatagramReady, false, 0) != 0) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 0);
         printf("Error initialising gUrtpDatagramReady semaphore (%s).\n", strerror(errno));
         return false;
     }
     if (sem_init(&gStopEncodeTask, false, 0) != 0) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 1);
         printf("Error initialising gStopEncodeTask semaphore (%s).\n", strerror(errno));
         return false;
     }
     if (sem_init(&gStopSendTask, false, 0) != 0) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 2);
         printf("Error initialising gStopSendTask semaphore (%s).\n", strerror(errno));
         return false;
     }
     if (sem_init(&gStopServerStatusTask, false, 0) != 0) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
         printf("Error initialising gStopServerStatusTask semaphore (%s).\n", strerror(errno));
         return false;
     }
@@ -709,7 +693,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     gSecondTicker = startTimer(1000000L, TIMER_PERIODIC, audioMonitor, NULL);
 
     if (!startAudioStreamingConnection()) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 0);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
         return false;
     }
 
@@ -717,7 +701,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     if (gpServerStatusTask == NULL) {
         gpServerStatusTask = new std::thread(checkServerStatus);
         if (gpServerStatusTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 1);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
         }
@@ -726,14 +710,14 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     printf("Setting up URTP...\n");
     gpUrtp = new Urtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
     if (!gpUrtp->init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 2);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
         printf("Unable to start URTP.\n");
         return false;
     }
 
     printf("Starting PCM...\n");
     if (!startPcm()) {
-        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 3);
+        LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 7);
         return false;
     }
 
@@ -741,29 +725,29 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
     if (gpSendTask == NULL) {
         gpSendTask = new std::thread(sendAudioData);
         if (gpSendTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 4);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 8);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
-            }
         }
+    }
 
     printf("Starting task to encode audio data...\n");
     if (gpEncodeTask == NULL) {
         gpEncodeTask = new std::thread(encodeAudioData);
         if (gpEncodeTask == NULL) {
-            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 5);
+            LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 9);
             printf("Error starting task (%s).\n", strerror(errno));
             return false;
-            }
         }
+    }
 
     printf("Now, hopefully, streaming audio.\n");
-    
+
     // Wait a few second for the link to the server to really establish
     for (int x = 0; !gAudioCommsConnected && (x < AUDIO_SERVER_LINK_ESTABLISHMENT_WAIT_S); x++) {
         sleep(1);
     }
-    
+
     return true;
 }
 

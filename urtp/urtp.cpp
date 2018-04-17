@@ -680,4 +680,10 @@ int Urtp::getUrtpDatagramsFreeMin()
     return _minNumDatagramsFree;
 }
 
+// The last URTP sequence number
+int Urtp::getUrtpSequenceNumber()
+{
+    return _sequenceNumber;
+}
+
 // End of file

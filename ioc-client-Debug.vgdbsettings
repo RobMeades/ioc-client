@@ -99,42 +99,16 @@
       <EnableNonStopMode>false</EnableNonStopMode>
       <MaxBreakpointLimit>0</MaxBreakpointLimit>
     </AdditionalGDBSettings>
-    <LaunchGDBSettings xsi:type="GDBLaunchParametersCustom">
-      <GDBEnvironment>
-        <Records>
-          <Record>
-            <VariableName>LANG</VariableName>
-            <Value>en_US.UTF-8</Value>
-          </Record>
-        </Records>
-        <EnvironmentSetupFiles />
-      </GDBEnvironment>
-      <GDBArguments>--interpreter mi --args "$(TargetPath)"</GDBArguments>
-      <SessionStartMode>AttachToPID</SessionStartMode>
-      <GDBServerSettings>
-        <SendCtrlCToGDBServer>false</SendCtrlCToGDBServer>
-        <PortGroupIndexInStartedRegex>0</PortGroupIndexInStartedRegex>
-        <StartTimeout>1000</StartTimeout>
-        <ExitTimeout>0</ExitTimeout>
-        <TerminateGDBServerOnExit>true</TerminateGDBServerOnExit>
-      </GDBServerSettings>
-      <GDBServerCommand>
-        <SkipWhenRunningCommandList>false</SkipWhenRunningCommandList>
-        <RemoteHost>
-          <HostName>10.10.1.15</HostName>
-          <Transport>SSH</Transport>
-          <UserName>rob</UserName>
-        </RemoteHost>
-        <BackgroundMode xsi:nil="true" />
-      </GDBServerCommand>
-      <TargetSelectionCommand>-target-select remote :0</TargetSelectionCommand>
-      <AttachPID>0</AttachPID>
+    <LaunchGDBSettings xsi:type="GDBLaunchParametersNewInstance">
+      <DebuggedProgram>$(TargetPath)</DebuggedProgram>
+      <GDBServerPort>2000</GDBServerPort>
+      <ProgramArguments>mic_hw ioc-server.redirectme.net:5065 -ls localhost:5050 -ld /rw/ioc-log-tmp -p LED</ProgramArguments>
     </LaunchGDBSettings>
     <GenerateCtrlBreakInsteadOfCtrlC>false</GenerateCtrlBreakInsteadOfCtrlC>
     <DeploymentTargetPath />
     <X11WindowMode>Local</X11WindowMode>
     <KeepConsoleAfterExit>false</KeepConsoleAfterExit>
-    <RunGDBUnderSudo>false</RunGDBUnderSudo>
+    <RunGDBUnderSudo>true</RunGDBUnderSudo>
     <DeploymentMode>Auto</DeploymentMode>
     <LdLibraryPath />
     <DeployWhenLaunchedWithoutDebugging>true</DeployWhenLaunchedWithoutDebugging>
