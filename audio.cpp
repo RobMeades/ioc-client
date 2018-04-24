@@ -137,7 +137,7 @@ static Urtp *gpUrtp = NULL;
 static int gStreamingSocket = -1;
 
 // Flag to indicate that the TCP connection is up.
-static bool gTcpConnected = false;
+static volatile bool gTcpConnected = false;
 
 // Flag to indicate that the audio comms channel is up.
 static volatile bool gAudioCommsConnected = false;
@@ -388,15 +388,20 @@ static void sendAudioData()
     unsigned long durationMs;
     int retValue;
     bool okToDelete = false;
+    bool keepingSending = true;
 
     runAnywayTime.tv_sec = AUDIO_SEND_DATA_RUN_ANYWAY_TIME_S;
     runAnywayTime.tv_nsec = 0;
 
     while (sem_trywait(&gStopSendTask) != 0) {
-        if (gTcpConnected) {
+        // Always try to send if the socket is connected so that
+        // the server can return a timing datagram which confirms
+        // that a proper connection has been made, in which case
+        // the server check task will set gAudioCommsConnected true
+        if (gTcpConnected && keepingSending) {
             // Wait for at least one datagram to be ready to send
             sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
-            while (gTcpConnected && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
+            while (gTcpConnected && keepingSending && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
                 okToDelete = false;
                 gettimeofday(&start, NULL);
                 // Send the datagram
@@ -412,11 +417,12 @@ static void sendAudioData()
                     gNumAudioSendFailures++;
                 } else {
                     badStarted = false;
-                    if (gpNowStreamingHandler != NULL) {
-                        gpNowStreamingHandler();
-                    }
                     gNumAudioBytesSent += retValue;
                     okToDelete = true;
+                    //  If we really are streaming then call the callback having sent something
+                    if(gAudioCommsConnected && (gpNowStreamingHandler != NULL)) {
+                        gpNowStreamingHandler();
+                    }
                 }
                 //LOG(EVENT_SEND_STOP, (int) pUrtpDatagram);
 
@@ -428,6 +434,7 @@ static void sendAudioData()
                     if (durationMs > AUDIO_MAX_DURATION_SOCKET_ERRORS_MS) {
                         LOG(EVENT_SOCKET_ERRORS_FOR_TOO_LONG, durationMs);
                         gAudioCommsConnected = false;
+                        keepingSending = false;
                     }
                     if ((retValue == ENOTCONN) ||
                         (retValue == ECONNRESET) ||
@@ -435,6 +442,7 @@ static void sendAudioData()
                         (retValue == EPIPE)) {
                         LOG(EVENT_SOCKET_BAD, retValue);
                         gAudioCommsConnected = false;
+                        keepingSending = false;
                     }
                 }
                 gettimeofday(&end, NULL);

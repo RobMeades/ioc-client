@@ -111,10 +111,19 @@ int Urtp::processAudio(int monoSample)
             _audioShift = _audioUnusedBitsMin;
         }
         if ((_audioUnusedBitsMin - _audioShift > AUDIO_DESIRED_UNUSED_BITS) && (_audioShift < AUDIO_MAX_SHIFT_BITS)) {
-            _audioShift++;
-            LOG(EVENT_MONO_SAMPLE_AUDIO_SHIFT, _audioShift);
+            // An increase in gain is noted here but not applied immediately in order to do
+            // some smoothing.  Instead a note is kept of the last N audio shifts and
+            // only if it persists is the gain increased.
+            _audioUpShiftCount++;
+            if (_audioUpShiftCount > AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT) {
+                _audioShift++;
+                _audioUpShiftCount = 0;
+                LOG(EVENT_MONO_SAMPLE_AUDIO_SHIFT, _audioShift);
+            }
         } else if ((_audioUnusedBitsMin - _audioShift < AUDIO_DESIRED_UNUSED_BITS) && (_audioShift > 0)) {
+            // A reduction in gain must happen immediately to avoid clipping
             _audioShift--;
+            _audioUpShiftCount = 0;
             LOG(EVENT_MONO_SAMPLE_AUDIO_SHIFT, _audioShift);
         }
 
@@ -552,6 +561,7 @@ Urtp::Urtp(void(*datagramReadyCb)(const char *),
     _audioShiftSampleCount = 0;
     _audioUnusedBitsMin = 0x7FFFFFFF;
     _audioShift = 0;
+    _audioUpShiftCount = 0;
     _audioShiftFixed = -1;
     _sequenceNumber = 0;
     _numDatagramOverflows = 0;

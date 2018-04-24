@@ -456,8 +456,10 @@ Find the entry for your device.  Mine was:
 
 Create a file `90-ioc.rules` in `/etc/udev/rules.d` with the following contents:
 
-`ACTION=="add", KERNEL=="tty*", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="1102", SYMLINK+="modem"`
-
+```
+#Add modem device
+ACTION=="add", KERNEL=="tty*", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="1102",  SYMLINK+="modem"
+```
 ...adjusting the numbers as necessary for your modem and making sure there is a newline at the end.  Reboot and check that `/dev` now includes the device `modem`.  If it doesn't, you can check if there are any errors reading the new rule with:
 
 `udevadm test /dev/bus/001/006`

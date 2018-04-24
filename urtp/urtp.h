@@ -200,9 +200,15 @@ public:
     // Thresholding: audio levels that are within +/- this value
     // are not shifteed.  Set to 0 for no thresholding.
 #   ifndef AUDIO_SHIFT_THRESHOLD
-#    define AUDIO_SHIFT_THRESHOLD 30
+#    define AUDIO_SHIFT_THRESHOLD 0
 #   endif
 
+    // The number of consecutive up-shifts that have to be indicated
+    // before a real increase in gain is applied.
+#   ifndef AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT
+#    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 10
+#   endif
+    
     /** The number of samples in BLOCK_DURATION_MS.  Note that a
      * sample is stereo when the audio is in raw form but is reduced
      * to mono when we organise it into URTP packets, hence the size
@@ -423,6 +429,11 @@ protected:
     /** The current audio shift value.
      */
     int _audioShift;
+
+    /** A count of the number of times that an
+     * increase in shift has been suggested.
+     */
+    int _audioUpShiftCount;
 
     /** The fixed gain audio shift value.
      */
