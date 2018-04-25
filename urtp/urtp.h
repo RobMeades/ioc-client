@@ -194,17 +194,19 @@ public:
     /** The maximum audio shift to use (established by experiment).
      */
 #   ifndef AUDIO_MAX_SHIFT_BITS
-#    define AUDIO_MAX_SHIFT_BITS 12
+#    define AUDIO_MAX_SHIFT_BITS 11
 #   endif
 
-    // Thresholding: audio levels that are within +/- this value
-    // are not shifteed.  Set to 0 for no thresholding.
+    /** Thresholding: audio levels that are within +/- this value
+     * are not shifteed.  Set to 0 for no thresholding.
+     */
 #   ifndef AUDIO_SHIFT_THRESHOLD
 #    define AUDIO_SHIFT_THRESHOLD 0
 #   endif
 
-    // The number of consecutive up-shifts that have to be indicated
-    // before a real increase in gain is applied.
+    /** The number of consecutive up-shifts that have to be indicated
+     * before a real increase in gain is applied.
+     */
 #   ifndef AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT
 #    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 10
 #   endif
