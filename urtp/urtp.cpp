@@ -76,11 +76,11 @@ static unsigned int toneIndex = 0;
  * capture of the decoded data at the server and then check that the two
  * waveforms track each other reasonably well.
  */
-#define TEST_MODULO 0x7FFFFFFFL // 32 bits without hitting the sign bit
+#define TEST_MODULO 0x7FFFFFFFL
 # ifdef DISABLE_UNICAM
 #  define TEST_INCREMENT 10000
 # else
-#  define TEST_INCREMENT 200000
+#  define TEST_INCREMENT 20000 // larger for Unicam as we only increment once per block
 # endif
 static long long testValue = 0;
 static int testIncrement = TEST_INCREMENT;
@@ -215,7 +215,6 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
     int numBlocks = 0;
     unsigned int i = 0;
     int usedBits;
-    int shiftValue32Bit;
     int shiftValueCoded;
     bool isEvenBlock = false;
     char *pDestOriginal = dest;
@@ -231,13 +230,16 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
 #ifdef ENABLE_RAMP_TEST
         monoSample = (int) testValue;
 #endif
+        // Scale the sample down to the maximum size we want the
+        // decoder to derive
+        monoSample >>= (32 - UNICAM_MAX_DECODED_SAMPLE_SIZE_BITS);
 
 #ifdef URTP_TEST_AUDIO_OUTPUT_FILENAME
         if (urtpTestAudioOutputFile != NULL) {
             fwrite(&monoSample, sizeof(monoSample), 1, urtpTestAudioOutputFile);
         }
 #endif
-        // Put the samples into the unicam buffer and track the max abs value
+        // Track the max abs value
         absSample = monoSample;
         if (absSample < 0) {
             absSample = -absSample;
@@ -245,11 +247,14 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
         if (absSample > maxSample) {
             maxSample = absSample;
         }
+
+        // Put the sample into the unicam buffer
         _unicamBuffer[i] = monoSample;
         i++;
+
+        // Check if we have a unicam block's worth ready to go
         if (i >= sizeof (_unicamBuffer) / sizeof (_unicamBuffer[0])) {
             i = 0;
-            shiftValue32Bit = 0;
             shiftValueCoded = 0;
             usedBits = 32;
 
@@ -282,30 +287,26 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
                     usedBits--;
                 }
             }
+            maxSample = 0;
 
            //LOG(EVENT_UNICAM_MAX_VALUE_USED_BITS, usedBits);
 
-            maxSample = 0;
-            if (usedBits >= UNICAM_CODED_SAMPLE_SIZE_BITS) {
-                shiftValue32Bit = usedBits - UNICAM_CODED_SAMPLE_SIZE_BITS;
+            // We have a block of 32 bit samples (scaled down to
+            // UNICAM_MAX_DECODED_SAMPLE_SIZE_BITS) and we know what the 
+            // maximum number of used bits per sample are in the block.  If
+            // the number of used bits is bigger than 8 bits then add the
+            // shift value.  With a UNICAM_MAX_DECODED_SAMPLE_SIZE_BITS of
+            // 16 the shifValueCoded will never be greater than 8.
+            if (usedBits > UNICAM_CODED_SAMPLE_SIZE_BITS) {
+                shiftValueCoded = usedBits - UNICAM_CODED_SAMPLE_SIZE_BITS;
             }
-
-            //LOG(EVENT_UNICAM_SHIFT_VALUE, shiftValue32Bit);
-
-            // shiftValue32Bit will shift an 8 bit number up into a 32 bit
-            // number when decoded (a 24 bit shift). We want the decoder to
-            // reassemble into 16 bit numbers, so our coded shift range is only
-            // 0 to 8 (i.e. shiftValue32Bit from 16 to 24).
-            if (shiftValue32Bit >= 16) {
-                shiftValueCoded = shiftValue32Bit - 16;
-            }
-
             //LOG(EVENT_UNICAM_CODED_SHIFT_VALUE, shiftValueCoded);
+
             isEvenBlock = false;
             if ((numBlocks & 1) == 0) {
                 isEvenBlock = true;
             }
-            
+
             // If we're on an odd block, the shift value goes into the
             // upper nibble of the shift byte, which is where the dest
             // pointer will already be pointed at, with nibble
@@ -321,7 +322,7 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
             // Write into the output all the values in the buffer shifted down by this amount
             for (unsigned int x = 0; x < sizeof (_unicamBuffer) / sizeof (_unicamBuffer[0]); x++) {
                 //LOG(EVENT_UNICAM_SAMPLE, _unicamBuffer[x]);
-                *dest = _unicamBuffer[x] >> shiftValue32Bit;
+                *dest = _unicamBuffer[x] >> shiftValueCoded;
                 //LOG(EVENT_UNICAM_COMPRESSED_SAMPLE, *dest);
                 dest++;
             }

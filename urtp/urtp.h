@@ -214,6 +214,10 @@ public:
      */
 #   define TWO_UNICAM_BLOCKS_SIZE        (((SAMPLES_PER_UNICAM_BLOCK * UNICAM_CODED_SAMPLE_SIZE_BITS) / 8) * 2 + 1)
 
+    /** The maximum size that we want a decoded unicam sample to end up.
+     */
+#   define UNICAM_MAX_DECODED_SAMPLE_SIZE_BITS  16
+
     /** URTP parameters: the size of the header
      */
 #   define URTP_HEADER_SIZE        14
