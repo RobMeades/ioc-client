@@ -42,7 +42,7 @@
 
 // For testing only: define this to also write incoming audio PCM
 // stream to file.
-//#define AUDIO_TEST_OUTPUT_FILENAME "/rw/audio.pcm"
+//#define AUDIO_TEST_OUTPUT_FILENAME "/rw/audio_raw.pcm"
 
 // The maximum amount of time allowed to send a
 // datagram of audio over TCP.

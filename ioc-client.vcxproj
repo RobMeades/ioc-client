@@ -44,7 +44,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <NMakeIncludeSearchPath>$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\c++\6;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\arm-linux-gnueabihf\c++\6;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\c++\6\backward;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0001\include;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0003\include;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0002\include-fixed;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\arm-linux-gnueabihf;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include;log;timer;urtp;utils;$(ProjectDir);$(NMakeIncludeSearchPath)</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\c++\6;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\arm-linux-gnueabihf\c++\6;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\c++\6\backward;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0001\include;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0003\include;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0002\include-fixed;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include\arm-linux-gnueabihf;$(LOCALAPPDATA)\VisualGDB\RemoteSourceCache\10.10.1.15\0000\include;log;timer;urtp;utils;$(NMakeIncludeSearchPath)</NMakeIncludeSearchPath>
     <NMakeForcedIncludes>$(ProjectDir)\gcc_Debug.h;$(VISUALGDB_DIR)\gcc_compat.h;$(NMakeForcedIncludes)</NMakeForcedIncludes>
     <NMakeBuildCommandLine>"$(VISUALGDB_DIR)\VisualGDB.exe" /build "$(ProjectPath)" "/solution:$(SolutionPath)"  "/config:$(Configuration)" "/platform:$(Platform)"</NMakeBuildCommandLine>
     <NMakeCleanCommandLine>"$(VISUALGDB_DIR)\VisualGDB.exe" /clean "$(ProjectPath)" "/solution:$(SolutionPath)"  "/config:$(Configuration)" "/platform:$(Platform)"</NMakeCleanCommandLine>
@@ -80,6 +80,7 @@
     <ClCompile Include="log\log.cpp" />
     <ClCompile Include="log\log_strings.c" />
     <ClCompile Include="timer\timer.cpp" />
+    <ClCompile Include="urtp\fir.cpp" />
     <ClCompile Include="urtp\urtp.cpp" />
     <ClCompile Include="utils\utils.cpp" />
     <None Include="Makefile" />

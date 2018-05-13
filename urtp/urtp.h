@@ -59,7 +59,6 @@
  * - Audio coding scheme is one of:
  *   - PCM_SIGNED_16_BIT (0)
  *   - UNICAM_COMPRESSED_8_BIT (1)
- *   - UNICAM_COMPRESSED_10_BIT (2)
  * - Sequence number is a 16 bit sequence number, incremented
  *   on sending of each datagram.
  * - Timestamp is a uSecond timestamp representing the moment
@@ -67,7 +66,7 @@
  * - Number of bytes to follow is the size of the audio payload
  *   the follows in this datagram.
  *
- * There are three audio coding schemes.  The default, and most
+ * There are two audio coding schemes.  The default, and most
  * efficient, is 8 bit UNICAM compression.  If UNICAM is not
  * used, 16 bit RAW PCM is used.
  *
@@ -98,56 +97,39 @@
  *       |                   ...                         |
  *  28   |              Block 0, Sample 14               |
  *  29   |              Block 0, Sample 15               |
- *  30   |     Block 0 shift     |     Block 1 shift     |
+ *  30   |     Block 0 shift   |     Block 1 shift       |
  *  31   |              Block 1, Sample 0                |
  *  32   |              Block 1, Sample 1                |
  *       |                     ...                       |
  *  45   |              Block 1, Sample 14               |
  *  46   |              Block 1, Sample 15               |
- *  47   |     Block 1 shift     |     Block 2 shift     |
+ *  47   |              Block 2, Sample 0                |
+ *  48   |              Block 2, Sample 1                |
+ *       |                   ...                         |
+ *  61   |              Block 2, Sample 14               |
+ *  62   |              Block 2, Sample 15               |
+ *  63   |     Block 2 shift   |     Block 3 shift       |
+ *  64   |              Block 3, Sample 0                |
+ *  65   |              Block 3, Sample 1                |
  *       |                     ...                       |
- *  N    |     Block M-1 shift   |     Block M shift     |
- *  N+1  |              Block M, Sample 0                |
- *  N+2  |              Block M, Sample 1                |
+ *  78   |              Block 3, Sample 14               |
+ *  79   |              Block 3, Sample 15               |
  *       |                     ...                       |
- *  N+15 |              Block M, Sample 14               |
- *  N+16 |              Block M, Sample 15               |
+ *  N    |              Block M, Sample 0                |
+ *  N+1  |              Block M, Sample 1                |
+ *       |                     ...                       |
+ *  N+14 |              Block M, Sample 14               |
+ *  N+15 |              Block M, Sample 15               |
+ *  N+16 |     Block M shift   |     Block M+1 shift     |
+ *  N+17 |            Block M+1, Sample 0                |
+ *  N+18 |            Block M+1, Sample 1                |
+ *       |                     ...                       |
+ *  N+31 |            Block M+1, Sample 14               |
+ *  N+32 |            Block M+1, Sample 15               |
  *
  * ...where the number of blocks is between 0 and 20, so 330
  * bytes in total, plus a 14 byte header gives an overall data
  * rate of 132 kbits/s.
- *
- * If the audio coding scheme is UNICAM_COMPRESSED_10_BIT,
- * the payload follows the pattern above but with 10 bit
- * samples packed as follows:
- *
- * Byte  |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |
- *--------------------------------------------------------
- *  14   |  Block 0, Sample 0                            |
- *  15   |           |  Block 0, Sample 1                |
- *  16   |                       |  Block 0, Sample 2    |
- *  17   |                                   |  Block 0, |
- *  18   | Sample 3                                      |
- *  19   |  Block 0, Sample 4                            |
- *  20   |           |  Block 0, Sample 5                |
- *       |                     ...                       |
- *  29   |  Block 0, Sample 12                           |
- *  30   |           |  Block 0, Sample 13               |
- *  31   |                       |  Block 0, Sample 14   |
- *  32   |                                   |  Block 0, |
- *  33   | Sample 15                                     |
- *  34   |     Block 0 shift     |     Block 1 shift     |
- *  35   |  Block 1, Sample 0                            |
- *  36   |           |  Block 1, Sample 1                |
- *  37   |                       |  Block 1, Sample 2    |
- *  38   |                                   |  Block 1, |
- *  39   | Sample 3                                      |
- *       |                     ...                       |
- *
- * The number of blocks is still between 0 and 20 but now each
- * block is 20 bytes plus half a byte of shift value, so 410
- * bytes in total, plus a 14 byte header gives an overall data
- * rate of 169.6 kbits/s.
  *
  * The receiving end should be able to reconstruct an audio
  * stream from this.
@@ -170,7 +152,7 @@ public:
 #   endif
 
     /** The number of bits that a sample is coded into for UNICAM.
-     * Only 8 and 10 are supported, 8 is the default.
+     * Only 8 is supported.
      */
 #   ifndef UNICAM_CODED_SAMPLE_SIZE_BITS
 #    define UNICAM_CODED_SAMPLE_SIZE_BITS 8
@@ -264,7 +246,7 @@ public:
      */
 #   define SYNC_BYTE               0x5a
 
-    /* Constructor.
+    /** Constructor.
      *
      * @param datagramReadyCb          Callback to be invoked once a URTP datagram
      *                                 has been encoded.  IMPORTANT: don't do much
@@ -283,7 +265,7 @@ public:
          void(*datagramOverflowStartCb)(void) = NULL,
          void(*datagramOverflowStopCb)(int) = NULL);
 
-    /* Destructor.
+    /** Destructor.
      */
     ~Urtp();
 

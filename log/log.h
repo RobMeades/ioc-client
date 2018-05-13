@@ -34,7 +34,7 @@
 /** The number of log entries (must be 1 or greater).
  */
 #ifndef MAX_NUM_LOG_ENTRIES
-# define MAX_NUM_LOG_ENTRIES 10000
+# define MAX_NUM_LOG_ENTRIES 100000
 #endif
 
 // Increase this from 1 to skip flushing on file writes if the
