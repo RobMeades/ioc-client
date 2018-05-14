@@ -202,10 +202,10 @@ public:
 
     /** The number of consecutive up-shifts that have to be indicated
      * before a real increase in gain is applied.  Each individual
-     * upshift is of BLOCK_DURATION_MS so 500 is 1 second
+     * upshift is of BLOCK_DURATION_MS so 50 is 1 second
      */
 #   ifndef AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT
-#    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 5000
+#    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 500
 #   endif
     
     /** The number of samples in BLOCK_DURATION_MS.  Note that a
