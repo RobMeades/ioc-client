@@ -25,6 +25,8 @@
 #ifndef _URTP_
 #define _URTP_
 
+#include <fir.h>
+
 /** Urtp class.
  *
  * This class takes in block of Philips I2S protocol samples
@@ -170,13 +172,19 @@ public:
      * to avoid clipping when we can't move fast enough due to averaging.
      */
 #   ifndef AUDIO_DESIRED_UNUSED_BITS
-#    define AUDIO_DESIRED_UNUSED_BITS 4
+#    define AUDIO_DESIRED_UNUSED_BITS 3
+#   endif
+
+    /** The hysteresis in the gain control in bits.
+     */
+#   ifndef AUDIO_SHIFT_HYSTERESIS_BITS
+#    define AUDIO_SHIFT_HYSTERESIS_BITS 3
 #   endif
 
     /** The maximum audio shift to use (established by experiment).
      */
 #   ifndef AUDIO_MAX_SHIFT_BITS
-#    define AUDIO_MAX_SHIFT_BITS 11
+#    define AUDIO_MAX_SHIFT_BITS 12
 #   endif
 
     /** Thresholding: audio levels that are within +/- this value
@@ -186,11 +194,18 @@ public:
 #    define AUDIO_SHIFT_THRESHOLD 0
 #   endif
 
+    /** The default shift to use.
+     */
+#   ifndef AUDIO_SHIFT_DEFAULT
+#    define AUIDIO_SHIFT_DEFAULT (AUDIO_MAX_SHIFT_BITS - AUDIO_SHIFT_HYSTERESIS_BITS)
+#   endif
+
     /** The number of consecutive up-shifts that have to be indicated
-     * before a real increase in gain is applied.
+     * before a real increase in gain is applied.  Each individual
+     * upshift is of BLOCK_DURATION_MS so 500 is 1 second
      */
 #   ifndef AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT
-#    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 10
+#    define AUDIO_NUM_UP_SHIFTS_FOR_A_SHIFT 5000
 #   endif
     
     /** The number of samples in BLOCK_DURATION_MS.  Note that a
@@ -207,7 +222,7 @@ public:
 
     /** UNICAM parameters: number of UNICAM blocks per block.
      */
-#  define UNICAM_BLOCKS_PER_BLOCK       (SAMPLES_PER_BLOCK / SAMPLES_PER_UNICAM_BLOCK)
+#   define UNICAM_BLOCKS_PER_BLOCK       (SAMPLES_PER_BLOCK / SAMPLES_PER_UNICAM_BLOCK)
 
     /** UNICAM parameters: the size of two UNICAM blocks (has to be a two since
      * the shift nibble for two blocks are encoded into one byte).
@@ -359,8 +374,7 @@ protected:
      */
     typedef enum {
         PCM_SIGNED_16_BIT = 0,
-        UNICAM_COMPRESSED_8_BIT = 1,
-        UNICAM_COMPRESSED_10_BIT = 2
+        UNICAM_COMPRESSED_8_BIT = 1
     } AudioCoding;
 
     /** The possible states for a container.
@@ -386,7 +400,7 @@ protected:
      */
     typedef struct ContainerTag {
         ContainerState state;
-        void * contents;
+        void *contents;
         ContainerTag *next;
     } Container;
 
@@ -431,9 +445,13 @@ protected:
      */
     int _unicamBuffer[SAMPLES_PER_UNICAM_BLOCK];
 
+    /** The FIR pre-emphasis filter for unicam encoding
+     */
+    Fir _preemphasis;
+
     /** Pointer to the URTP datagrams.
      */
-    char * _datagramMemory;
+    char *_datagramMemory;
 
     /** A linked list to manage the datagrams, must have the same
      * number of elements as gDatagram.
@@ -508,7 +526,7 @@ protected:
      * following block is encoded into the upper four bits, followed by
      * the shifted samples for that block, etc.
      *
-     * This represents UNICAM_COMPRESSED_x_BIT.
+     * This represents UNICAM_COMPRESSED_8_BIT.
      *
      * @param rawAudio  a pointer to a buffer of
      *                  SAMPLES_PER_BLOCK * 2 uint32_t's

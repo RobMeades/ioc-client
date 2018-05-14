@@ -146,7 +146,7 @@ int Urtp::processAudio(int monoSample)
         if (_audioShift > _audioUnusedBitsMin) {
             _audioShift = _audioUnusedBitsMin;
         }
-        if ((_audioUnusedBitsMin - _audioShift > AUDIO_DESIRED_UNUSED_BITS) && (_audioShift < AUDIO_MAX_SHIFT_BITS)) {
+        if ((_audioUnusedBitsMin - _audioShift > (AUDIO_DESIRED_UNUSED_BITS + AUDIO_SHIFT_HYSTERESIS_BITS)) && (_audioShift < AUDIO_MAX_SHIFT_BITS)) {
             // An increase in gain is noted here but not applied immediately in order to do
             // some smoothing.  Instead a note is kept of the last N audio shifts and
             // only if it persists is the gain increased.
@@ -234,6 +234,10 @@ int Urtp::codeUnicam(const uint32_t *rawAudio, char *dest)
         // decoder to derive
         monoSample >>= (32 - UNICAM_MAX_DECODED_SAMPLE_SIZE_BITS);
 
+        // Add the _preemphasis
+        firPut(&_preemphasis, (double) monoSample);
+        monoSample = (int) firGet(&_preemphasis);
+        
 #ifdef URTP_TEST_AUDIO_OUTPUT_FILENAME
         if (urtpTestAudioOutputFile != NULL) {
             fwrite(&monoSample, sizeof(monoSample), 1, urtpTestAudioOutputFile);
@@ -604,7 +608,7 @@ Urtp::Urtp(void(*datagramReadyCb)(const char *),
     _containerNextForReading = _container;
     _audioShiftSampleCount = 0;
     _audioUnusedBitsMin = 0x7FFFFFFF;
-    _audioShift = 0;
+    _audioShift = AUIDIO_SHIFT_DEFAULT;
     _audioUpShiftCount = 0;
     _audioShiftFixed = -1;
     _sequenceNumber = 0;
@@ -638,6 +642,8 @@ bool Urtp::init(void *datagramStorage, int audioShiftFixed)
     Container *tmp = NULL;
 
     _audioShiftFixed = audioShiftFixed;
+
+    firInit(&_preemphasis);
 
 #ifdef DISABLE_UNICAM
     {
