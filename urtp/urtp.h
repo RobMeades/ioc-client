@@ -172,7 +172,7 @@ public:
      * to avoid clipping when we can't move fast enough due to averaging.
      */
 #   ifndef AUDIO_DESIRED_UNUSED_BITS
-#    define AUDIO_DESIRED_UNUSED_BITS 3
+#    define AUDIO_DESIRED_UNUSED_BITS 4
 #   endif
 
     /** The hysteresis in the gain control in bits.
