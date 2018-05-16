@@ -75,6 +75,8 @@
  * @param pAlsaPcmDeviceName   the name of the ALSA PCM device to stream
  *                             from (must be 32 bits per channel, stereo,
  *                             16 kHz sample rate).
+ * @param maxShift             the maximum audio shift (gain) to apply,
+ *                             see urtp.h for the valid range.
  * @param pAudioServerUrl      the URL of the server to stream at.
  * @param pWatchdogHandler     pointer to the watchdog handler, NULL if none is active.
  * @param pNowStreamingHandler pointer to a "I'm streaming" handler which should be called
@@ -84,6 +86,7 @@
  */
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
                          const char *pAudioServerUrl,
+                         int maxShift,
                          void(*pWatchdogHandler)(void),
                          void(*pNowStreamingHandler)(void));
 

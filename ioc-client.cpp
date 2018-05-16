@@ -27,6 +27,7 @@
 #include <utils.h>
 #include <timer.h>
 #include <audio.h>
+#include <urtp.h>
 #include <log.h>
 
 /* ----------------------------------------------------------------
@@ -63,10 +64,11 @@ static int gGpio = -1;
 // Print the usage text
 static void printUsage(char * pExeName) {
     printf("\n%s: run the Internet of Chuffs client.  Usage:\n", pExeName);
-    printf("    %s audio_source audio_server_url <-ls log_server_url> <-ld log_directory> <-p gpio>\n", pExeName);
+    printf("    %s audio_source audio_server_url <-g max_gain> <-ls log_server_url> <-ld log_directory> <-p gpio>\n", pExeName);
     printf("where:\n");
     printf("    audio_source is the name of the ALSA PCM audio capture device (must be 32 bits per channel, stereo, 16 kHz sample rate),\n");
     printf("    audio_server_url is the URL of the Internet of Chuffs server,\n");
+    printf("    -g optionally specifies the maximum gain to apply; default is max which is %d, lower numbers mean less gain (and noise),\n", AUDIO_MAX_SHIFT_BITS);
     printf("    -ls optionally specifies the URL of a server to upload log-files to (where a logging server application must be listening),\n");
     printf("    -ld optionally specifies the directory to use for log files (default %s); the directory will be created if it does not exist,\n", DEFAULT_LOG_FILE_PATH);
     printf("    -p optionally specifies a GPIO pin to toggle to show activity (using wiringPi numbering),\n");
@@ -126,6 +128,7 @@ int main(int argc, char *argv[])
     bool logFileUploadSuccess = false;
     int x = 0;
     char *pExeName = NULL;
+    int maxShift = AUDIO_MAX_SHIFT_BITS;
     char *pPcmAudio = NULL;
     char *pAudioUrl = NULL;
     char *pLogUrl = NULL;
@@ -157,7 +160,13 @@ int main(int argc, char *argv[])
         // Test for server URL
         } else if (x == 2) {
             pAudioUrl = argv[x];
-        // Test for log server option
+            // Test for max gain option
+        } else if (strcmp(argv[x], "-g") == 0) {
+            x++;
+            if (x < argc) {
+                maxShift = atoi(argv[x]);
+            }
+            // Test for log server option
         } else if (strcmp(argv[x], "-ls") == 0) {
             x++;
             if (x < argc) {
@@ -181,16 +190,21 @@ int main(int argc, char *argv[])
 
     // Must have the two mandatory command-line parameters
     if ((pPcmAudio != NULL) && (pAudioUrl != NULL)) {
-        // Check if the directory exists
-        if (stat(pLogFilePath, &st) == -1) {
-            // If it doesn't exist create it
-            if (mkdir(pLogFilePath, 0700) == 0) {
-                success = true;
+        // Check that the maximum shift value, if specifed, is sensible
+        if ((maxShift >= 0) && (maxShift <= AUDIO_MAX_SHIFT_BITS)) {
+            // Check if the directory exists
+            if (stat(pLogFilePath, &st) == -1) {
+                // If it doesn't exist create it
+                if (mkdir(pLogFilePath, 0700) == 0) {
+                    success = true;
+                } else {
+                    printf("Unable to create directory temporary log file directory %s (%s).\n", pLogFilePath, strerror(errno));
+                }
             } else {
-                printf("Unable to create directory temporary log file directory %s (%s).\n", pLogFilePath, strerror(errno));
+                success = true;
             }
         } else {
-            success = true;
+            printf("Max gain must be between 0 and %d (not %d).\n", AUDIO_MAX_SHIFT_BITS, maxShift);
         }
 
         if (success) {
@@ -243,7 +257,7 @@ int main(int argc, char *argv[])
                     // out of streaming.  In the latter case we need to clean up, so always
                     // do that here just in case
                     stopAudioStreaming();
-                    if (startAudioStreaming(pPcmAudio, pAudioUrl, watchdogHandler, ledToggleHandler)) {
+                    if (startAudioStreaming(pPcmAudio, pAudioUrl, maxShift, watchdogHandler, ledToggleHandler)) {
                         printf("Audio streaming started, press CTRL-C to exit\n");
                         // Safe to upload log files now we've succeeded in making
                         // at least one connection

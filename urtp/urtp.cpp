@@ -126,11 +126,7 @@ int Urtp::processAudio(int monoSample)
     //LOG(EVENT_MONO_SAMPLE_UNUSED_BITS, unusedBits);
 
     if (absSample > AUDIO_SHIFT_THRESHOLD) {
-        if (_audioShiftFixed >= 0) {
-            monoSample <<= _audioShiftFixed;
-        } else {
-            monoSample <<= _audioShift;
-        }
+        monoSample <<= _audioShift;
     }
 
     // Update the minimum number of unused bits
@@ -146,7 +142,7 @@ int Urtp::processAudio(int monoSample)
         if (_audioShift > _audioUnusedBitsMin) {
             _audioShift = _audioUnusedBitsMin;
         }
-        if ((_audioUnusedBitsMin - _audioShift > (AUDIO_DESIRED_UNUSED_BITS + AUDIO_SHIFT_HYSTERESIS_BITS)) && (_audioShift < AUDIO_MAX_SHIFT_BITS)) {
+        if ((_audioUnusedBitsMin - _audioShift > (AUDIO_DESIRED_UNUSED_BITS + AUDIO_SHIFT_HYSTERESIS_BITS)) && (_audioShift < _audioShiftMax)) {
             // An increase in gain is noted here but not applied immediately in order to do
             // some smoothing.  Instead a note is kept of the last N audio shifts and
             // only if it persists is the gain increased.
@@ -610,7 +606,7 @@ Urtp::Urtp(void(*datagramReadyCb)(const char *),
     _audioUnusedBitsMin = 0x7FFFFFFF;
     _audioShift = AUIDIO_SHIFT_DEFAULT;
     _audioUpShiftCount = 0;
-    _audioShiftFixed = -1;
+    _audioShiftMax = AUDIO_MAX_SHIFT_BITS;
     _sequenceNumber = 0;
     _numDatagramOverflows = 0;
     _numDatagramsFree = 0;
@@ -635,13 +631,13 @@ Urtp::~Urtp()
 }
 
 // Initialise ourselves.
-bool Urtp::init(void *datagramStorage, int audioShiftFixed)
+bool Urtp::init(void *datagramStorage, int audioShiftMax)
 {
     bool success = false;
     int x = 0;
     Container *tmp = NULL;
 
-    _audioShiftFixed = audioShiftFixed;
+    _audioShiftMax = audioShiftMax;
 
     firInit(&_preemphasis);
 

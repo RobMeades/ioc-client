@@ -356,7 +356,7 @@ static int tcpSend(const char *pData, int size)
     if (gTcpConnected) {
         gettimeofday(&start, NULL); 
         while ((count < size) && (((unsigned long) timeDifference(&start, NULL) / 1000) < AUDIO_TCP_SEND_TIMEOUT_MS)) {
-            x = send(gStreamingSocket, pData + count, size - count, 0);
+            x = send(gStreamingSocket, pData + count, size - count, MSG_NOSIGNAL); //  MSG_NOSIGNAL prevents send from throwing exceptions like EPIPE
             if (x > 0) {
                 count += x;
             }
@@ -666,6 +666,7 @@ static void stopPcm()
 // Note: here be multiple return statements.
 bool startAudioStreaming(const char *pAlsaPcmDeviceName,
                          const char *pAudioServerUrl,
+                         int maxShift,
                          void(*pWatchdogHandler)(void),
                          void(*pNowStreamingHandler)(void))
 {
@@ -717,7 +718,7 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
 
     printf("Setting up URTP...\n");
     gpUrtp = new Urtp(&datagramReadyCb, &datagramOverflowStartCb, &datagramOverflowStopCb);
-    if (!gpUrtp->init((void *) &gDatagramStorage, AUDIO_DEFAULT_FIXED_GAIN)) {
+    if (!gpUrtp->init((void *) &gDatagramStorage, maxShift)) {
         LOG(EVENT_AUDIO_STREAMING_START_FAILURE, 6);
         printf("Unable to start URTP.\n");
         return false;
@@ -753,6 +754,10 @@ bool startAudioStreaming(const char *pAlsaPcmDeviceName,
 
     // Wait a few second for the link to the server to really establish
     for (int x = 0; !gAudioCommsConnected && (x < AUDIO_SERVER_LINK_ESTABLISHMENT_WAIT_S); x++) {
+        // Make sure the watchdog is fed
+        if (gpWatchdogHandler != NULL) {
+            gpWatchdogHandler();
+        }
         sleep(1);
     }
 

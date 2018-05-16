@@ -292,10 +292,12 @@ public:
      *
      * @param datagramStorage  a pointer to URTP_DATAGRAM_STORE_SIZE of
      *                         memory for datagram buffers.
-     * @param audioShiftFixed  the fixed gain, usually not used (-1).
+     * @param audioShiftMax    the maximum audio shift, default is
+     *                         AUDIO_MAX_SHIFT_BITS, lower numbers will
+     *                         lower the maximum gain.
      * @return                 true if successful, otherwise false.
      */
-    bool init(void *datagramStorage, int audioShiftFixed = -1);
+    bool init(void *datagramStorage, int audioShiftMax = AUDIO_MAX_SHIFT_BITS);
 
     /** URTP encode an audio block.
      * Only the samples from the LEFT CHANNEL (i.e. the even uint32_t's) are
@@ -437,9 +439,9 @@ protected:
      */
     int _audioUpShiftCount;
 
-    /** The fixed gain audio shift value.
+    /** The maximum audio shift value.
      */
-    int _audioShiftFixed;
+    int _audioShiftMax;
 
     /** Buffer for UNICAM coding.
      */

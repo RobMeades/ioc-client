@@ -396,9 +396,9 @@ You should end up with the binary `~/ioc-client/Debug/ioc-client`.
 
 If you have the [server-side of the IoC](https://github.com/RobMeades/ioc-server) set up somewhere and, preferably, also have the [log server application](https://github.com/RobMeades/ioc-log) running on the same remote machine, you should now be able to connect `ioc-client` to them with:
 
-`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -p 0 -ls log_server:port -ld log_directory_path`
+`~/ioc-client/Debug/ioc-client mic_hw ioc_server:port -g 10 -p 0 -ls log_server:port -ld log_directory_path`
 
-...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `0` represents GPIO0, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.  When a connection is active GPIO0 will toggle on every transmit; it's probably useful to connect an LED (via a 1k resistor) between that pin and ground.
+...where `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `10` represents a good maximum gain (can get a bit noisy when it is quietotherwise), `0` represents GPIO0, `log_server:port` is the URL where the [ioc logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily.  Here the connection to the server applications will be direct rather than over a secure connection.  When a connection is active GPIO0 will toggle on every transmit; it's probably useful to connect an LED (via a 1k resistor) between that pin and ground.
 
 # Security
 This section describes how to set up SSH connectivity which will be used below when [Making Incoming TCP Connections Over Cellular](#making-incoming-tcp-connections-over-cellular) and [Running Everything Automatically](#running-everything-automatically).
@@ -664,7 +664,7 @@ Once you have everything running sweetly, create another `systemctl` unit file t
 Description=IoC client
 
 [Service]
-ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -p 0 -ls log_server:port -ld log_directory_path
+ExecStart=/home/username/ioc-client/Debug/ioc-client mic_hw ioc_server:port -g 10 -p 0 -ls log_server:port -ld log_directory_path
 WatchdogSec=10s
 Restart=on-failure
 RestartSec=3
@@ -674,7 +674,7 @@ KillSignal=SIGINT
 [Install]
 WantedBy=multi-user.target
 ```
-...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `0` represents GPIO0, `log_server:port` is the URL where the [IoC logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
+...where `username` is replaced by your user name on the Raspberry Pi, `mic_hw` is the  device representing the I2S microphone, `ioc_server:port` is the URL where the [ioc-server](https://github.com/RobMeades/ioc-server) application is running, `10` represents a good maximum gain to avoid noise when there is no input, `0` represents GPIO0, `log_server:port` is the URL where the [IoC logging server](https://github.com/RobMeades/ioc-log) is running and `log_directory_path` is a path where log files can be stored temporarily (probably in a sub-directory of `/home/username`).
 
 Test that it works with:
 
