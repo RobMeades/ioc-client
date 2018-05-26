@@ -330,7 +330,7 @@ bool beginLogFileUpload(const char *pLoggingServerUrl)
             }
             while ((pDirEnt = readdir(pDir)) != NULL) {
                 // Open the file, provided it's not the one we're currently logging to
-                if(((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)) &&
+                if (((strcmp(pDirEnt->d_name, ".") != 0) && (strcmp(pDirEnt->d_name, "..") != 0)) &&
                     (pDirEnt->d_type == DT_REG) &&
                     ((pCurrentLogFile == NULL) || (strcmp(pDirEnt->d_name, pCurrentLogFile) != 0))) {
                     z++;

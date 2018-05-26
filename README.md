@@ -1024,3 +1024,109 @@ Now edit `/etc/fstab` and add the line for the new partition, in my case this wa
 Now reboot.  Should the reboot fail, connect a monitor to the Raspberry Pi and determine what it is objecting to.  You should then be able to put the SD card back into your other Linux machine in order to fix the problem.
 
 Having done all that, create a directory under `rw` in which to store the `ioc-client` log files, make the root file system editable temporarily with `sudo mount -o remount,rw /` then edit `/lib/systemd/system/ioc-client.service` to match, edit `/etc/fstab` once more to remove the line which mounted the previous `log_directory_path` in `tmpfs` and, to be tidy, remove the old `log_directory_path` directory and its contents.  Reboot again and `ioc-client` log files should persist in your new directory.
+
+If, during testing, you want the Linux logs to be saved in this zone rather than to RAM disk as normal, edit `/etc/fstab` and change the line:
+
+`tmpfs    /var/log           tmpfs    defaults,noatime,nosuid,mode=0755,size=50m           0       0`
+
+...to:
+
+`tmpfs    /var/log           rw       defaults,noatime,nosuid,mode=0755,size=50m           0       0`
+
+It's probably not a good idea to leave it this way though as your SD card will get hammered.
+
+## Making Sure The Modem Device Appears
+
+I had some trouble with the Raspberry Pi not enumerating the modem device properly.  Since this is pretty vital, I borrowed from [this source](http://billauer.co.il/blog/2013/02/usb-reset-ehci-uhci-linux/) to create the following bash script:
+
+```
+#!/bin/bash
+# This script resets the named USB modem device on a Raspberry Pi
+
+if [ "$1" = "" ]; then
+  echo Please give the name of the USB device to be reset, e.g. $0 \"u-blox Wireless Module\"
+  exit 1
+fi
+
+name=$1
+directory="/sys/bus/usb/drivers/usb"
+
+if [ $EUID != 0 ]; then
+  echo This must be run as root!
+  exit 1
+fi
+
+if ! cd $directory; then
+  echo Failed to change directory to $directory
+  exit 1
+fi
+
+echo Looking for device \"$name\" in $directory...
+
+found=0
+
+for x in ?-* ; do
+  # Warning: spaces are significant here, don't fiddle with them
+  y=$(cat $x/product)
+  if [ "$y" = "$name" ]; then
+    found=1
+    echo Peripheral \"$y\" is USB device $x, resetting it...
+    echo -n "$x" > unbind
+    sleep 3
+    echo -n "$x" > bind
+    echo Reset of \"$y\" completed.
+  fi
+done
+
+if [ $found = 0 ]; then
+  echo Unable to find \"$name\" on the USB bus.
+  exit 2
+fi
+```
+
+I then made a further script to check for the existence of the`/dev/modem` device and call my `usb_reset/sh` script in its absence:
+
+```
+#!/bin/bash
+# This script looks for a given device under /dev and, if it doesn't exist, it resets a given USB device
+
+if [ "$1" = "" ] || [ "$2" = "" ]; then
+  echo Please give the name of the device to look for and the USB device to reset if it is not there, e.g. $0 \"modem\" \"u-blox Wireless Module\"
+  exit 1
+fi
+
+if [ ! -e "/dev/"$1 ]; then
+  echo Device \"$1\" does not exist, resetting \"$2\"...
+  /home/rob/usb_reset.sh "$2"
+fi
+```
+I made both scripts executable with `sudo chmod +x`.  Then I made another couple of `systemctl` unit files; first `/lib/systemd/system/check_modem.service`:
+
+```
+[Unit]
+Description=Check that the modem device exists and, if it does not, reset the USB modem device
+
+[Service]
+Type=oneshot
+Environment="DEVICE=modem" "USB_DEVICE=u-blox Wireless Module"
+ExecStart=/home/rob/check_modem.sh ${DEVICE} ${USB_DEVICE}
+```
+...then `/lib/systemd/system/check_modem.timer`:
+
+```
+[Unit]
+Description=Run check_modem service periodically
+
+[Timer]
+OnUnitActiveSec=30s
+OnBootSec=30s
+
+[Install]
+WantedBy=timers.target
+```
+This has the effect of running the modem device presence check every 30 seconds from boot.  I started the timer with `sudo systemctl start check_modem.timer`, enabled it from boot with `sudo systemctl enable check_modem.timer` and checked that it was running with `sudo systemctl list-timers --all`:
+
+```
+NEXT                         LEFT     LAST                         PASSED       UNIT                         ACTIVATES
+Tue 2018-05-22 23:10:13 UTC  27s left Tue 2018-05-22 23:09:42 UTC  2s ago       check_modem.timer            check_modem.service
+```

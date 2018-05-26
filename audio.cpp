@@ -388,7 +388,6 @@ static void sendAudioData()
     unsigned long durationMs;
     int retValue;
     bool okToDelete = false;
-    bool keepingSending = true;
 
     runAnywayTime.tv_sec = AUDIO_SEND_DATA_RUN_ANYWAY_TIME_S;
     runAnywayTime.tv_nsec = 0;
@@ -396,12 +395,12 @@ static void sendAudioData()
     while (sem_trywait(&gStopSendTask) != 0) {
         // Always try to send if the socket is connected so that
         // the server can return a timing datagram which confirms
-        // that a proper connection has been made, in which case
-        // the server check task will set gAudioCommsConnected true
-        if (gTcpConnected && keepingSending) {
+        // that a proper connection has been made; the server check
+        // task will set gAudioCommsConnected to true or false
+        if (gTcpConnected) {
             // Wait for at least one datagram to be ready to send
             sem_timedwait(&gUrtpDatagramReady, &runAnywayTime);
-            while (gTcpConnected && keepingSending && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
+            while (gTcpConnected && (gpUrtp != NULL) && (pUrtpDatagram = gpUrtp->getUrtpDatagram()) != NULL) {
                 okToDelete = false;
                 gettimeofday(&start, NULL);
                 // Send the datagram
@@ -420,7 +419,7 @@ static void sendAudioData()
                     gNumAudioBytesSent += retValue;
                     okToDelete = true;
                     //  If we really are streaming then call the callback having sent something
-                    if(gAudioCommsConnected && (gpNowStreamingHandler != NULL)) {
+                    if (gAudioCommsConnected && (gpNowStreamingHandler != NULL)) {
                         gpNowStreamingHandler();
                     }
                 }
@@ -433,16 +432,12 @@ static void sendAudioData()
                     durationMs = (unsigned long) timeDifference(&badStart, &end) / 1000;
                     if (durationMs > AUDIO_MAX_DURATION_SOCKET_ERRORS_MS) {
                         LOG(EVENT_SOCKET_ERRORS_FOR_TOO_LONG, durationMs);
-                        gAudioCommsConnected = false;
-                        keepingSending = false;
                     }
                     if ((retValue == ENOTCONN) ||
                         (retValue == ECONNRESET) ||
                         (retValue == ENOBUFS) ||
                         (retValue == EPIPE)) {
                         LOG(EVENT_SOCKET_BAD, retValue);
-                        gAudioCommsConnected = false;
-                        keepingSending = false;
                     }
                 }
                 gettimeofday(&end, NULL);
@@ -556,18 +551,20 @@ static void checkServerStatus()
                                         (((long long unsigned int) timingDatagram[9]) << 8)  + (((long long unsigned int) timingDatagram[10])));
                     LOG(EVENT_ROUNDTRIP_DELAY_MICROSECONDS, (int)((long long unsigned int) timestamp - datagramSendTime));
                 } else {
-                    noValidTimingDatagramCount++;
-                    LOG(EVENT_NO_TIMING_DATAGRAM_RECEIVED, noValidTimingDatagramCount);
+                    // If we're receiving very old timings then it is better to close the link
+                    // and re-establish to flush out any delay
+                    LOG(EVENT_TIMING_DATAGRAM_TIMEOUT, lastUrtpSequenceNumber);
+                    gAudioCommsConnected = false;
+                    noValidTimingDatagramCount = 0;
                 }
             } else {
                 noValidTimingDatagramCount++;
                 LOG(EVENT_NO_TIMING_DATAGRAM_RECEIVED, noValidTimingDatagramCount);
-            }
-
-            if (noValidTimingDatagramCount > AUDIO_TIMING_DATAGRAM_WAIT_S) {
-                LOG(EVENT_TIMING_DATAGRAM_TIMEOUT, lastUrtpSequenceNumber);
-                gAudioCommsConnected = false;
-                noValidTimingDatagramCount = 0;
+                if (noValidTimingDatagramCount > AUDIO_TIMING_DATAGRAM_WAIT_S) {
+                    LOG(EVENT_TIMING_DATAGRAM_TIMEOUT, lastUrtpSequenceNumber);
+                    gAudioCommsConnected = false;
+                    noValidTimingDatagramCount = 0;
+                }
             }
 
             usleep(100000);

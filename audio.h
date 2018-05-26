@@ -58,7 +58,7 @@
 #define AUDIO_TIMING_DATAGRAM_LENGTH 11
 
 /** The maximium age of a timing datagram in seconds. */
-#define AUDIO_TIMING_DATAGRAM_AGE_S 15
+#define AUDIO_TIMING_DATAGRAM_AGE_S 10
 
 /** The number of seconds to wait for any one timing datagram. */
 #define AUDIO_TIMING_DATAGRAM_WAIT_S 5
