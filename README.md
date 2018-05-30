@@ -903,7 +903,7 @@ If you ever need to write to disk, update any packages, etc., you can easily rem
 `sudo mount -o remount,rw /boot`
 
 ## Saving Logs Persistently With A Read Only Root
-If you wish to have the robustness of the Linux world as specified [above](#preventing-disk-corruption-on-removal-of-power-without-shut-down) but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
+If you wish to have the robustness of the Linux world as specified [above](#preventing-disk-corruption-on-removal-of-power-without-shut-down) but you also want to save your `ioc-client` log files for later uploading, you should set up a separate partition in which to store them.  To do this you will require another Linux machine that you can mount the SD card in as a second drive (or a version of Ubuntu on USB drive with which you can temporarily boot any Windows machine into Linux).  The instructions below are based on those here:
 
 https://www.howtoforge.com/linux_resizing_ext3_partitions
 
@@ -960,7 +960,7 @@ Now you can delete and recreate the partition to match (with no loss of data).  
 
 Note: this is run on the disk and not the partition, hence no number at the end.
 
-Press `p` to print the partition list, getting an output for our partitions something like:
+Press `p` to print the partition list, getting an output for your partitions something like:
 
 ```
 /dev/sdb1        8192    93236    85045 41.5M  c W95 FAT32 (LBA)
@@ -982,7 +982,7 @@ Now we can create a new partition in the space we have freed up. Run `fdisk` onc
 /dev/sdb1        8192    93236    85045 41.5M  c W95 FAT32 (LBA)
 /dev/sdb2       94208 12382207 12288000  5.9G 83 Linux
 ```
-Create the new partition with the commands `n`, `p`, `3`.  The start sector for the new partition, from the calculations above, was 12382208 in my case.  Accept the default for the final sector (in my case `15564799`).  Write the new partition and exit `fdisk` with the command `w`.    Run `sudo partprobe /dev/sdX` to re-read the new partition information.  Now if you run `sudo fdisk -l` you should see something like:
+Create the new partition with the commands `n`, `p`, `3`.  The start sector for the new partition, from the calculations above, was 12382208 in my case.  Accept the default for the final sector (in my case 15564799).  Write the new partition and exit `fdisk` with the command `w`.    Run `sudo partprobe /dev/sdX` to re-read the new partition information.  Now if you run `sudo fdisk -l` you should see something like:
 
 ```
 /dev/sdb1           8192    93236    85045 41.5M  c W95 FAT32 (LBA)
