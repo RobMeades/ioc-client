@@ -1033,7 +1033,7 @@ If, during testing, you want the Linux logs to be saved in this zone rather than
 
 `tmpfs    /var/log           rw       defaults,noatime,nosuid,mode=0755,size=50m           0       0`
 
-It's probably not a good idea to leave it this way though as your SD card will get hammered.
+It's probably not a good idea to leave it this way though as it will hammer your SD card.
 
 ## Making Sure The Modem Device Appears
 
@@ -1084,7 +1084,7 @@ if [ $found = 0 ]; then
 fi
 ```
 
-I then made a further script to check for the existence of the`/dev/modem` device and call my `usb_reset/sh` script in its absence:
+I then made a further script to check for the existence of the`/dev/modem` device and call my `usb_reset.sh` script in its absence:
 
 ```
 #!/bin/bash
